@@ -1,0 +1,19 @@
+/* Tela de login/cadastro. */
+.auth {
+  min-height: 100dvh; display: flex; flex-direction: column; justify-content: center;
+  align-items: center; gap: var(--space-5); padding: var(--space-5) var(--space-4);
+}
+.auth-brand { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); text-align: center; }
+.auth-brand img { border-radius: 16px; }
+.auth-card {
+  width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: var(--space-4);
+  padding: var(--space-5) var(--space-4);
+}
+.auth-card .form { margin-top: var(--space-4); }
+.auth-card #view-forgot .form,
+.auth-card #view-reset .form { margin-top: 0; }
+
+.btn-link {
+  min-height: 40px; border: 0; background: none; color: var(--primary); font-weight: 600;
+}
+.btn-link:hover { text-decoration: underline; }

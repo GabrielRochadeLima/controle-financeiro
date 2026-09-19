@@ -1,0 +1,21 @@
+# Sistema / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# Ferramentas
+node_modules/
+.claude/
+graphify-out/
+
+# Arquivos temporários de teste (harnesses locais)
+_*.html
+_*.js
+
+# NUNCA versionar segredos. A chave "anon" em js/config.js é pública por
+# projeto e pode ir para o repositório; a service_role/secret jamais.
+.env
+.env.*
+*.pem

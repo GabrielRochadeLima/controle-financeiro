@@ -1,0 +1,40 @@
+# Publica o app no GitHub Pages a cada push na branch main.
+# Só os arquivos listados abaixo vão para o site: supabase/ (migrations e testes),
+# README, .github etc. NÃO são publicados, mesmo com o repositório privado.
+name: Deploy no GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Montar a pasta publicada
+        run: |
+          mkdir _site
+          cp index.html login.html manifest.webmanifest .nojekyll _site/
+          cp -r css js assets _site/
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Entrar — Financeiro</title>
+  <!-- CSP: só código do próprio site; conexões apenas com o Supabase. 'unsafe-inline' só em style
+       (o app usa style="" para larguras e cores). frame-ancestors não funciona em <meta>; ver README. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://*.supabase.co; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="theme-color" content="#f4f5f7">
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" href="assets/icons/icon.svg" type="image/svg+xml">
+  <script src="js/theme-init.js"></script>
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/global.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/auth.css">
+</head>
+<body>
+  <main class="auth">
+    <div class="auth-brand">
+      <img src="assets/icons/icon.svg" width="56" height="56" alt="">
+      <h1>Financeiro</h1>
+      <p class="text-secondary" id="auth-subtitle">Entre para controlar seu dinheiro.</p>
+    </div>
+
+    <div class="card auth-card">
+      <div id="notice" class="form-error" hidden></div>
+
+      <!-- Entrar / Criar conta -->
+      <section id="view-main">
+        <div class="segmented" role="tablist" aria-label="Acesso">
+          <button type="button" role="tab" id="tab-login" aria-selected="true">Entrar</button>
+          <button type="button" role="tab" id="tab-signup" aria-selected="false">Criar conta</button>
+        </div>
+
+        <form class="form" id="form-login" novalidate>
+          <div class="field">
+            <label for="login-email">E-mail</label>
+            <input class="input" id="login-email" type="email" inputmode="email" autocomplete="username" required>
+          </div>
+          <div class="field">
+            <label for="login-password">Senha</label>
+            <input class="input" id="login-password" type="password" autocomplete="current-password" required>
+          </div>
+          <div class="form-error" data-error hidden></div>
+          <button class="btn btn-primary btn-block" type="submit">Entrar</button>
+          <button class="btn btn-link" type="button" id="go-forgot">Esqueci minha senha</button>
+        </form>
+
+        <form class="form" id="form-signup" novalidate hidden>
+          <div class="field">
+            <label for="signup-name">Como devemos te chamar?</label>
+            <input class="input" id="signup-name" autocomplete="given-name" maxlength="60">
+          </div>
+          <div class="field">
+            <label for="signup-email">E-mail</label>
+            <input class="input" id="signup-email" type="email" inputmode="email" autocomplete="email" required>
+          </div>
+          <div class="field">
+            <label for="signup-password">Senha</label>
+            <input class="input" id="signup-password" type="password" autocomplete="new-password" minlength="8" required>
+            <span class="field-hint">Mínimo de 8 caracteres.</span>
+          </div>
+          <div class="form-error" data-error hidden></div>
+          <button class="btn btn-primary btn-block" type="submit">Criar conta</button>
+        </form>
+      </section>
+
+      <!-- Recuperar senha -->
+      <section id="view-forgot" hidden>
+        <form class="form" id="form-forgot" novalidate>
+          <h2>Recuperar senha</h2>
+          <p class="text-secondary">Enviaremos um link para você criar uma nova senha.</p>
+          <div class="field">
+            <label for="forgot-email">E-mail</label>
+            <input class="input" id="forgot-email" type="email" inputmode="email" autocomplete="email" required>
+          </div>
+          <div class="form-error" data-error hidden></div>
+          <button class="btn btn-primary btn-block" type="submit">Enviar link</button>
+          <button class="btn btn-link" type="button" id="back-login">Voltar para o login</button>
+        </form>
+      </section>
+
+      <!-- Nova senha (após clicar no link do e-mail) -->
+      <section id="view-reset" hidden>
+        <form class="form" id="form-reset" novalidate>
+          <h2>Criar nova senha</h2>
+          <div class="field">
+            <label for="reset-password">Nova senha</label>
+            <input class="input" id="reset-password" type="password" autocomplete="new-password" minlength="8" required>
+            <span class="field-hint">Mínimo de 8 caracteres.</span>
+          </div>
+          <div class="form-error" data-error hidden></div>
+          <button class="btn btn-primary btn-block" type="submit">Salvar nova senha</button>
+        </form>
+      </section>
+    </div>
+  </main>
+
+  <script type="module" src="js/login.js"></script>
+</body>
+</html>

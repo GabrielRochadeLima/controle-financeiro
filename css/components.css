@@ -1,0 +1,227 @@
+/* Componentes reutilizáveis: botão, campo, card, lista, toast, modal, estados. */
+
+/* ---------- Ícones ---------- */
+.icon { width: 22px; height: 22px; flex: none; }
+
+/* ---------- Botões ---------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
+  min-height: var(--tap); padding: 0 var(--space-4);
+  border: 1px solid transparent; border-radius: var(--radius);
+  background: var(--surface-2); color: var(--text);
+  font-weight: 600; font-size: var(--fs-md);
+  transition: background 0.15s, transform 0.1s, opacity 0.15s;
+}
+.btn:hover { text-decoration: none; }
+.btn:active { transform: scale(0.98); }
+.btn[disabled] { opacity: 0.55; cursor: not-allowed; transform: none; }
+
+.btn-primary { background: var(--primary); color: var(--primary-contrast); }
+.btn-primary:hover { background: var(--primary-hover); }
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-ghost { background: transparent; border-color: var(--border); }
+.btn-block { width: 100%; }
+.btn-sm { min-height: 40px; padding: 0 var(--space-3); font-size: var(--fs-sm); }
+
+.btn-icon {
+  width: 44px; height: 44px; min-height: 0; padding: 0; border-radius: 50%;
+  background: transparent; color: var(--text-secondary);
+}
+.btn-icon:hover { background: var(--surface-2); color: var(--text); }
+
+.btn.is-loading { position: relative; color: transparent; pointer-events: none; }
+.btn.is-loading::after {
+  content: ""; position: absolute; width: 20px; height: 20px; border-radius: 50%;
+  border: 2px solid var(--primary-contrast); border-right-color: transparent;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- Campos ---------- */
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field label { font-size: var(--fs-sm); font-weight: 600; color: var(--text-secondary); }
+.input, .select, .textarea {
+  width: 100%; min-height: var(--tap); padding: 0 var(--space-3);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); color: var(--text);
+  /* 16px evita o zoom automático do iOS ao focar */
+  font-size: var(--fs-md);
+}
+.textarea { padding: var(--space-3); min-height: 96px; resize: vertical; }
+.input::placeholder { color: var(--text-secondary); opacity: 0.7; }
+.input:focus, .select:focus, .textarea:focus {
+  outline: none; border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-soft);
+}
+.field-error { font-size: var(--fs-sm); color: var(--danger); }
+.field-hint { font-size: var(--fs-xs); color: var(--text-secondary); }
+
+.form { display: flex; flex-direction: column; gap: var(--space-4); }
+.form-error {
+  padding: var(--space-3); border-radius: var(--radius-sm);
+  background: var(--danger-soft); color: var(--danger); font-size: var(--fs-sm);
+}
+.form-success {
+  padding: var(--space-3); border-radius: var(--radius-sm);
+  background: var(--success-soft); color: var(--success); font-size: var(--fs-sm);
+}
+
+/* Controle segmentado (ex.: seletor de tema, tipo de movimentação). */
+.segmented {
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px;
+  padding: 4px; border-radius: var(--radius); background: var(--surface-2);
+}
+.segmented button {
+  min-height: 40px; border: 0; border-radius: calc(var(--radius) - 4px);
+  background: transparent; color: var(--text-secondary); font-weight: 600; font-size: var(--fs-sm);
+}
+.segmented button[aria-pressed="true"],
+.segmented button[aria-selected="true"] {
+  background: var(--surface); color: var(--text); box-shadow: var(--shadow);
+}
+
+/* ---------- Card ---------- */
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: var(--space-4);
+}
+.card-flat { padding: 0; overflow: hidden; }
+
+.stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); }
+.stat { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.stat-label { font-size: var(--fs-xs); color: var(--text-secondary); }
+.stat-value { font-size: var(--fs-md); font-weight: 700; }
+
+/* ---------- Lista ---------- */
+.list { list-style: none; margin: 0; padding: 0; }
+.list-item {
+  display: flex; align-items: center; gap: var(--space-3);
+  min-height: 60px; padding: var(--space-3) var(--space-4);
+  color: inherit;
+}
+.list-item + .list-item { border-top: 1px solid var(--border); }
+a.list-item:hover { background: var(--surface-2); text-decoration: none; }
+.list-item-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.list-item-title {
+  font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.list-item-sub { font-size: var(--fs-sm); color: var(--text-secondary); }
+.list-item-end { text-align: right; font-weight: 700; }
+
+.avatar {
+  width: 40px; height: 40px; flex: none; border-radius: 12px;
+  display: grid; place-items: center; font-size: 1.2rem;
+  background: var(--surface-2); color: var(--text-secondary);
+}
+
+.badge {
+  display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px;
+  font-size: var(--fs-xs); font-weight: 600; background: var(--surface-2); color: var(--text-secondary);
+}
+.badge-success { background: var(--success-soft); color: var(--success); }
+.badge-danger { background: var(--danger-soft); color: var(--danger); }
+.badge-warning { background: var(--warning-soft); color: var(--warning); }
+
+/* ---------- Barra de progresso (orçamento, categorias, metas) ---------- */
+.bar { height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.bar > span {
+  display: block; height: 100%; width: var(--value, 0%); border-radius: inherit;
+  background: var(--bar-color, var(--primary)); transition: width 0.5s var(--ease);
+}
+
+/* ---------- Estados vazio / carregando ---------- */
+.empty {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  gap: var(--space-2); padding: var(--space-5) var(--space-4);
+}
+.empty-icon {
+  width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--primary-soft); color: var(--primary); margin-bottom: var(--space-2);
+}
+.empty-icon .icon { width: 28px; height: 28px; }
+.empty h3 { font-size: var(--fs-md); }
+.empty p { color: var(--text-secondary); font-size: var(--fs-sm); max-width: 32ch; }
+.empty .btn { margin-top: var(--space-3); }
+
+.skeleton {
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--border) 50%, var(--surface-2) 75%);
+  background-size: 200% 100%; animation: shimmer 1.3s linear infinite;
+}
+@keyframes shimmer { to { background-position: -200% 0; } }
+.skeleton-line { height: 14px; }
+.skeleton-block { height: 96px; border-radius: var(--radius); }
+
+.page-error { text-align: center; }
+
+/* ---------- Toast ---------- */
+.toast-region {
+  position: fixed; left: 0; right: 0; z-index: 100; pointer-events: none;
+  bottom: calc(var(--nav-height) + var(--space-4) + env(safe-area-inset-bottom));
+  display: flex; flex-direction: column; align-items: center; gap: var(--space-2);
+  padding: 0 var(--space-4);
+}
+.toast {
+  pointer-events: auto; display: flex; align-items: center; gap: var(--space-2);
+  max-width: 420px; padding: 12px var(--space-4); border-radius: var(--radius);
+  background: var(--text); color: var(--background); font-size: var(--fs-sm); font-weight: 600;
+  box-shadow: var(--shadow-lg); animation: toast-in 0.25s var(--ease);
+}
+.toast .icon { width: 18px; height: 18px; }
+.toast-success .icon { color: var(--success); }
+.toast-error .icon { color: var(--danger); }
+.toast.is-leaving { opacity: 0; transform: translateY(8px); transition: 0.2s; }
+@keyframes toast-in { from { opacity: 0; transform: translateY(12px) scale(0.97); } }
+
+/* ---------- Modal (<dialog>): bottom sheet no celular, centralizado no desktop ---------- */
+.modal {
+  width: 100%; max-width: 100%; max-height: 92dvh; margin: auto 0 0; padding: 0;
+  border: 0; border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  background: var(--surface); color: var(--text); overflow: hidden;
+  box-shadow: var(--shadow-lg);
+}
+.modal[open] { display: flex; flex-direction: column; animation: sheet-in 0.28s var(--ease); }
+.modal::backdrop { background: var(--overlay); animation: fade-in 0.2s; }
+@keyframes sheet-in { from { transform: translateY(100%); } }
+@keyframes fade-in { from { opacity: 0; } }
+
+.modal-head {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+  padding: var(--space-4) var(--space-4) var(--space-2);
+}
+.modal-head h2 { font-size: var(--fs-lg); }
+.modal-body {
+  padding: var(--space-2) var(--space-4) var(--space-4); overflow-y: auto;
+  padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom));
+}
+.modal-actions { display: flex; gap: var(--space-3); margin-top: var(--space-4); }
+.modal-actions .btn { flex: 1; }
+
+/* ---------- Navegação ---------- */
+.bottom-nav {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
+  height: calc(var(--nav-height) + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
+  display: grid; grid-template-columns: repeat(5, 1fr); align-items: center;
+  background: var(--surface); border-top: 1px solid var(--border);
+}
+.nav-link {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  height: var(--nav-height); color: var(--text-secondary);
+  font-size: 0.6875rem; font-weight: 600; text-decoration: none; white-space: nowrap;
+}
+.nav-link:hover { text-decoration: none; }
+.nav-link[aria-current="page"] { color: var(--primary); }
+
+/* Botão central "+": grande e elevado, é a ação principal do app. */
+.nav-add { display: flex; justify-content: center; }
+.nav-add-btn {
+  width: 60px; height: 60px; margin-top: -26px; border-radius: 50%; border: 4px solid var(--background);
+  background: var(--primary); color: var(--primary-contrast);
+  display: grid; place-items: center; box-shadow: var(--shadow-lg);
+  transition: transform 0.12s var(--ease);
+}
+.nav-add-btn:active { transform: scale(0.92); }
+.nav-add-btn .icon { width: 28px; height: 28px; }
+
+.sidebar { display: none; }

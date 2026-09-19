@@ -1,0 +1,55 @@
+/* Breakpoints (mobile-first): 600px (tablet) e 900px (desktop com sidebar). */
+
+/* Telas muito estreitas (360px): compacta valores para não cortar texto. */
+@media (max-width: 380px) {
+  :root { --fs-2xl: 1.9rem; }
+  .app-main { padding: var(--space-3); padding-bottom: calc(var(--nav-height) + var(--space-5) + env(safe-area-inset-bottom)); }
+  .summary .stat-value { font-size: 0.8125rem; }
+}
+
+@media (min-width: 600px) {
+  .app-main { padding: var(--space-5); padding-bottom: calc(var(--nav-height) + var(--space-5) + env(safe-area-inset-bottom)); }
+  .summary .stat-value { font-size: var(--fs-md); }
+
+  /* Modal centralizado (deixa de ser bottom sheet). */
+  .modal {
+    max-width: 480px; margin: auto; border-radius: var(--radius-lg);
+  }
+  .modal[open] { animation: modal-in 0.22s var(--ease); }
+  @keyframes modal-in { from { opacity: 0; transform: translateY(12px) scale(0.97); } }
+}
+
+@media (min-width: 900px) {
+  .app { display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); }
+  .app-main { padding: var(--space-6); padding-bottom: var(--space-6); }
+  .bottom-nav { display: none; }
+
+  .toast-region { bottom: var(--space-5); }
+
+  .sidebar {
+    display: flex; flex-direction: column; gap: var(--space-4);
+    position: sticky; top: 0; height: 100dvh; padding: var(--space-5) var(--space-3);
+    background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto;
+  }
+  .sidebar-brand {
+    display: flex; align-items: center; gap: var(--space-2);
+    padding: 0 var(--space-3); font-weight: 800; font-size: var(--fs-lg);
+  }
+  .sidebar-brand .icon { color: var(--primary); }
+  .sidebar-nav { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+  .sidebar-link {
+    display: flex; align-items: center; gap: var(--space-3);
+    min-height: 44px; padding: 0 var(--space-3); border-radius: var(--radius-sm);
+    color: var(--text-secondary); font-weight: 600; text-decoration: none;
+  }
+  .sidebar-link:hover { background: var(--surface-2); text-decoration: none; color: var(--text); }
+  .sidebar-link[aria-current="page"] { background: var(--primary-soft); color: var(--primary); }
+  .sidebar-foot { display: flex; flex-direction: column; gap: var(--space-2); }
+
+  /* No desktop a "hero" do saldo tem espaço para o botão ao lado do valor. */
+  .balance-card { flex-direction: row; align-items: center; justify-content: space-between; }
+  .balance-card .btn { min-width: 220px; }
+
+  /* Dashboard em duas colunas nas seções secundárias. */
+  .dash-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-5); align-items: start; }
+}

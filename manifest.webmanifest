@@ -1,0 +1,12 @@
+{
+  "name": "Financeiro",
+  "short_name": "Financeiro",
+  "description": "Controle financeiro pessoal",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#f4f5f7",
+  "theme_color": "#5648d6",
+  "icons": [
+    { "src": "assets/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
