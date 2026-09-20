@@ -17,7 +17,9 @@ export async function loadDashboard() {
     getAccounts(),
     getCategories(),
     getCards(),
-    loadUnpaidInvoices(),
+    // As faturas são um widget extra: se falharem (ex.: migration de cartões ainda não aplicada),
+    // o resto da tela inicial continua funcionando.
+    loadUnpaidInvoices().catch((err) => { console.error('[dashboard] faturas indisponíveis', err); return []; }),
     unwrap(supabase.rpc('account_flows', { p_until: today })),
     // "Do mês" = do dia 1 até hoje: lançamentos futuros (parcelas, recorrências)
     // ainda não aconteceram e pertencem à previsão, não ao gasto realizado.
