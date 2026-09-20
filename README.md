@@ -2,7 +2,7 @@
 
 Sistema web pessoal, **mobile-first**, para controlar despesas, receitas, contas, cartões, parcelamentos, recorrências, orçamentos, metas e investimentos. A métrica de qualidade do projeto: **registrar uma despesa em poucos segundos pelo celular**.
 
-> **Status: Fase 2 concluída** (contas, categorias, movimentações e lançamento rápido, sobre a base da Fase 1). Veja o [roadmap](#roadmap).
+> **Status: Fase 3 concluída** (cartões, faturas e parcelamentos, sobre as fases 1 e 2). Veja o [roadmap](#roadmap).
 
 ## Funcionalidades
 
@@ -10,7 +10,7 @@ Sistema web pessoal, **mobile-first**, para controlar despesas, receitas, contas
 |------|--------|--------|
 | 1 | Estrutura, layout responsivo, tema claro/escuro, Supabase, autenticação, schema + RLS, dashboard básico | ✅ |
 | 2 | Contas, receitas, despesas, transferências, investimentos (aporte), categorias, **lançamento rápido** | ✅ |
-| 3 | Cartões, faturas, parcelamentos | ⏳ |
+| 3 | Cartões, faturas, parcelamentos | ✅ |
 | 4 | Recorrências, orçamentos, previsões | ⏳ |
 | 5 | Metas, investimentos | ⏳ |
 | 6 | Importação CSV/Excel, leitura de PDF, IA, Open Finance, 2FA | 🔮 futuro |
@@ -23,7 +23,13 @@ O que já funciona:
 - **Categorias e subcategorias** totalmente editáveis, com ícone e cor; a exclusão avisa o impacto.
 - Login, cadastro, recuperação de senha, sessão persistente, tema claro/escuro e dashboard.
 
-Compras no cartão, faturas e parcelas (Fase 3) ainda não existem: os módulos das fases seguintes mostram uma tela "Em breve".
+- **Cartões**: limite usado/disponível, fatura atual, criar/editar/arquivar/excluir (só sem compras).
+- **Faturas**: uma por mês de fechamento, navegáveis; status Aberta / Fechada / Paga / Atrasada; **pagar fatura** (sai da conta escolhida) e **desfazer pagamento**. Fatura paga fica imutável.
+- **Compras no cartão** pelo mesmo lançamento rápido: escolha o cartão no lugar da conta, e as **parcelas** (à vista, 2x…12x ou qualquer número até 120). O app mostra em qual fatura a compra cai e o valor de cada parcela.
+- **Compra parcelada**: detalhe com todas as parcelas e a situação de cada fatura; editar descrição/categoria (vale para todas) e excluir com escolha do impacto (só esta parcela, esta e as próximas, ou toda a compra). Parcelas em faturas pagas são preservadas.
+- Dashboard com as faturas próximas (abertas, fechadas ou atrasadas).
+
+Orçamentos, metas e investimentos (fases 4–5) ainda não existem: esses módulos mostram uma tela "Em breve".
 
 ## Tecnologias
 
@@ -38,18 +44,19 @@ Compras no cartão, faturas e parcelas (Fase 3) ainda não existem: os módulos 
 ├── login.html              entrar / criar conta / recuperar e redefinir senha
 ├── .github/workflows/      deploy automático no GitHub Pages
 ├── manifest.webmanifest    permite "Adicionar à tela inicial" no celular
-├── css/                    variables (tokens de tema) · global · components · dashboard · auth · responsive
+├── css/                    variables (tokens de tema) · global · components · dashboard · forms · cards · auth · responsive
 ├── js/
 │   ├── config.js           URL e chave pública do Supabase  ← você edita
 │   ├── app.js              guarda de sessão + rotas
 │   ├── login.js · theme-init.js (tema antes da 1ª pintura)
 │   ├── vendor/             supabase-js empacotado (não editar à mão)
-│   ├── core/               supabase, auth, router, store (cache), theme, format, dom (escape XSS), finance (REGRAS), validation, events, memory
-│   ├── services/           acesso a dados (reference, accounts, categories, transactions, dashboard)
-│   ├── ui/                 componentes: modal + confirmação, toast, estados, nav, ícones, lançamento rápido, campo de valor
-│   └── pages/              uma view por rota (dashboard, transactions, accounts, categories, settings, more, coming-soon)
-├── supabase/migrations/    001_initial_schema.sql (schema completo) · 002_drop_subcategory_check.sql
-├── supabase/tests/         rls_two_users.sql (teste de isolamento entre usuários)
+│   ├── core/               supabase, auth, router, store (cache), theme, format, dom (escape XSS), finance + cards (REGRAS), validation, events, memory
+│   ├── services/           acesso a dados (reference, accounts, categories, transactions, cards, dashboard)
+│   ├── ui/                 componentes: modal + confirmação, toast, estados, nav, ícones, lançamento rápido, campo de valor, formulário de cartão, detalhe de parcelamento
+│   └── pages/              uma view por rota (dashboard, transactions, accounts, categories, cards, card, settings, more, coming-soon)
+├── supabase/migrations/    001_initial_schema · 002_drop_subcategory_check · 003_cards_invoices
+├── supabase/tests/         rls_two_users.sql · cards_behaviour.sql (testes para rodar no SQL Editor)
+├── tests/                  rules.test.mjs (regras de fatura/parcela/validação: `node tests/rules.test.mjs`)
 └── assets/icons/
 ```
 
@@ -57,6 +64,7 @@ Compras no cartão, faturas e parcelas (Fase 3) ainda não existem: os módulos 
 
 - **App de página única (SPA) com rotas por hash**, em vez de um HTML por módulo. Navegação instantânea, um único carregamento do Supabase/sessão, e a barra inferior e o botão "+" ficam sempre presentes. Cada página ainda é um módulo carregado sob demanda.
 - **`installments` virou `installment_plans` + parcelas em `transactions`.** Saldo, fatura, previsão e orçamento somam uma única tabela, sem `UNION` e sem duplicar valor/data em dois lugares.
+- **Compras no cartão e pagamentos são gravados por funções do banco** (`create_card_purchase`, `pay_invoice`, `delete_installments`...), para serem atômicos (compra parcelada = plano + parcelas + faturas, tudo ou nada). As **regras** (qual fatura recebe a compra, vencimento, divisão das parcelas) continuam no JS; o banco só persiste e protege (fatura paga é imutável, por trigger).
 - **Sem coluna de status em fatura/transação.** Aberta/Fechada/Atrasada é derivada de datas no JS; só `paid_at` é gravado. "Efetivada" é `date <= hoje`.
 - **`users` = `profiles`** (1:1 com `auth.users`), criado pela função `bootstrap_user()` que o app chama após o login (não há trigger em `auth.users`, porque o projeto é compartilhado com outros apps e o cadastro de qualquer um deles dispararia o trigger).
 - **Rótulo "Movimentos"** na barra inferior: "Movimentações" quebra linha em 360px. A página continua se chamando Movimentações.
@@ -64,7 +72,7 @@ Compras no cartão, faturas e parcelas (Fase 3) ainda não existem: os módulos 
 ## Configuração do Supabase
 
 1. Crie um projeto em [supabase.com](https://supabase.com).
-2. **Banco:** *SQL Editor* → execute, **nesta ordem**, [`001_initial_schema.sql`](supabase/migrations/001_initial_schema.sql) e [`002_drop_subcategory_check.sql`](supabase/migrations/002_drop_subcategory_check.sql). Requer PostgreSQL 15+ (padrão do Supabase). O script cria e usa o schema **`controle-financeiro`** (não toca em `public`, então convive com outros apps no mesmo projeto).
+2. **Banco:** *SQL Editor* → execute, **nesta ordem**, [`001_initial_schema.sql`](supabase/migrations/001_initial_schema.sql), [`002_drop_subcategory_check.sql`](supabase/migrations/002_drop_subcategory_check.sql) e [`003_cards_invoices.sql`](supabase/migrations/003_cards_invoices.sql). Requer PostgreSQL 15+ (padrão do Supabase). O script cria e usa o schema **`controle-financeiro`** (não toca em `public`, então convive com outros apps no mesmo projeto).
    Depois, em *Project Settings → API → Exposed schemas*, confirme que `controle-financeiro` está na lista.
 3. **Auth → URL Configuration:** em *Site URL* coloque a URL onde o app roda (ex.: `http://localhost:5500`) e adicione em *Redirect URLs* a URL completa de `login.html` (ex.: `http://localhost:5500/login.html`). Sem isso o link de "Esqueci minha senha" não volta para o app.
 4. **Auth → Providers → Email:** mantenha a confirmação de e-mail ligada (recomendado). Com ela, quem se cadastra precisa confirmar antes de entrar; o app já trata esse caso.
@@ -95,14 +103,17 @@ O app é 100% estático. O workflow [`.github/workflows/pages.yml`](.github/work
 **Antes de colocar dados reais**
 
 1. Rode [`supabase/tests/rls_two_users.sql`](supabase/tests/rls_two_users.sql) (instruções no topo do arquivo). Deve terminar com "RLS OK". Se aparecer "FALHA", **não publique**.
-2. Confirme em *Security Advisor* (Supabase) que não há tabelas sem RLS no schema `controle-financeiro`.
+2. Depois da migration 003, rode também [`supabase/tests/cards_behaviour.sql`](supabase/tests/cards_behaviour.sql): deve terminar com "TESTES 003 OK".
+3. Confirme em *Security Advisor* (Supabase) que não há tabelas sem RLS no schema `controle-financeiro`.
+
+**Ordem de deploy quando há migration nova:** primeiro rode a migration no SQL Editor do Supabase, **depois** dê o `git push`. Se o código novo subir antes do banco estar pronto, as telas novas dão erro até a migration ser aplicada. As migrations são aditivas e não apagam dados.
 
 **Passo a passo**
 
 1. Crie um repositório no GitHub (o Pages em repositório **privado** exige plano pago, como o GitHub Pro; o site publicado continua público de qualquer forma). Depois, na pasta do projeto:
    ```bash
    git add .
-   git commit -m "Financeiro: fases 1 e 2"
+   git commit -m "Financeiro: primeira versão"
    git remote add origin https://github.com/SEU-USUARIO/NOME-DO-REPO.git
    git push -u origin main
    ```
@@ -145,7 +156,7 @@ Abra `http://localhost:5500/login.html`. Se `js/config.js` ainda tiver os valore
 
 ## Regras financeiras (resumo)
 
-Centralizadas em [`js/core/finance.js`](js/core/finance.js):
+Centralizadas em [`js/core/finance.js`](js/core/finance.js) (saldos, resumos) e [`js/core/cards.js`](js/core/cards.js) (faturas e parcelas):
 
 - **Receita ≠ transferência ≠ despesa.** Transferência move dinheiro entre duas contas e não entra em receitas nem despesas. O saldo reflete as duas pontas.
 - **Compra no cartão não baixa o saldo da conta.** Ela conta como despesa na data da compra e entra na fatura; o **pagamento da fatura** (`invoice_payment`) é que baixa a conta, sem contar como despesa de novo.
@@ -153,13 +164,23 @@ Centralizadas em [`js/core/finance.js`](js/core/finance.js):
 - Valores são sempre positivos; o `type` define a direção. Cálculos em centavos inteiros.
 - "Do mês" no dashboard = dia 1 até hoje; lançamentos futuros (parcelas, recorrências) pertencem à previsão.
 
+**Cartão, fatura e parcelas** (convenções; variam entre bancos e estão documentadas em `cards.js`):
+
+- A compra feita **até o dia do fechamento (inclusive)** entra na fatura que fecha naquele mês; depois, na do mês seguinte.
+- O vencimento cai no mesmo mês do fechamento se o dia de vencimento for **maior** que o de fechamento (fecha 3, vence 10); senão, no mês seguinte (fecha 25, vence 5). Dia inexistente no mês (31 em fevereiro) vira o último dia do mês.
+- **Parcelas:** a sobra de centavos fica nas primeiras (100,00 em 3x = 33,34 + 33,33 + 33,33), e cada parcela vai para a fatura seguinte à anterior, sempre em faturas diferentes.
+- **Limite usado** = soma das compras em faturas não pagas, **inclusive parcelas futuras**: a compra parcelada bloqueia o valor total do limite até as faturas serem pagas.
+- **Status da fatura:** Paga (tem `paid_at`) → Atrasada (venceu e não foi paga) → Fechada (passou o fechamento) → Aberta.
+- **Fatura paga é imutável:** não aceita inserir, excluir nem alterar valor/data das compras (trava no banco); só descrição e categoria. Para mexer, desfaça o pagamento.
+- Mudar os dias de fechamento/vencimento de um cartão vale para compras novas; faturas já criadas mantêm as datas.
+- Pagamento só de fatura **inteira** (pagamento parcial não existe ainda).
+
 ## Preparado para o futuro (nada disso está implementado)
 
 `transactions.source`, `external_id` (único por usuário) e `metadata` permitem plugar importação CSV/Excel, leitura de PDF de fatura, lançamento por texto com IA e Open Finance sem mudar o schema: a etapa de "revisão pelo usuário" produz linhas normais em `transactions`. 2FA usa `supabase.auth.mfa` sobre a mesma sessão (ponto de extensão documentado em `js/core/auth.js`).
 
 ## Roadmap
 
-- **Fase 3:** cartões (limite usado/disponível), geração e fechamento de faturas, compras parceladas (editar/cancelar sem corromper as demais), pagamento de fatura atômico via RPC.
 - **Fase 4:** recorrências (geração idempotente, editar uma/futuras, pausar/encerrar), orçamentos por categoria, previsão dos próximos meses e saldo projetado.
 - **Fase 5:** metas com contribuições e investimentos.
 - **Fase 6:** importação, PDF, IA, Open Finance, 2FA.

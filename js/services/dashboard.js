@@ -3,7 +3,9 @@
 import { supabase } from '../core/supabase.js';
 import { toISODate, todayISO } from '../core/format.js';
 import { accountBalance, totalBalance, periodSummary, spendingByCategory } from '../core/finance.js';
+import { addDays, invoiceStatus } from '../core/cards.js';
 import { getAccounts, getCategories } from './reference.js';
+import { getCards, loadUnpaidInvoices } from './cards.js';
 import { unwrap } from './db.js';
 
 export async function loadDashboard() {
@@ -11,9 +13,11 @@ export async function loadDashboard() {
   const today = todayISO();
   const monthStart = toISODate(new Date(now.getFullYear(), now.getMonth(), 1));
 
-  const [accounts, categories, flows, monthTx, recent] = await Promise.all([
+  const [accounts, categories, cards, unpaid, flows, monthTx, recent] = await Promise.all([
     getAccounts(),
     getCategories(),
+    getCards(),
+    loadUnpaidInvoices(),
     unwrap(supabase.rpc('account_flows', { p_until: today })),
     // "Do mês" = do dia 1 até hoje: lançamentos futuros (parcelas, recorrências)
     // ainda não aconteceram e pertencem à previsão, não ao gasto realizado.
@@ -21,7 +25,8 @@ export async function loadDashboard() {
       .select('type, amount, category_id')
       .gte('date', monthStart).lte('date', today)),
     unwrap(supabase.from('transactions')
-      .select('id, type, amount, date, description, category_id, account_id, to_account_id, credit_card_id')
+      .select('id, type, amount, date, description, category_id, account_id, to_account_id, credit_card_id, ' +
+        'installment_number, plan:installment_plans(installments_count)')
       .lte('date', today)
       .order('date', { ascending: false })
       .order('created_at', { ascending: false })
@@ -31,9 +36,20 @@ export async function loadDashboard() {
   const flowsByAccount = Object.fromEntries(flows.map((f) => [f.account_id, f]));
   const active = accounts.filter((a) => a.status === 'active');
 
+  // Faturas a acompanhar: não pagas, com valor e que fecham em até ~1 mês (a aberta, as fechadas
+  // e as atrasadas). Parcelas de meses distantes ficam de fora para não poluir a tela inicial.
+  const horizon = addDays(today, 31);
+  const invoices = unpaid
+    .filter((i) => Number(i.total_amount) > 0 && i.closing_date <= horizon)
+    .map((i) => ({ ...i, card: cards.find((c) => c.id === i.credit_card_id), status: invoiceStatus(i, today) }))
+    .filter((i) => i.card)
+    .slice(0, 3); // já vêm ordenadas por vencimento
+
   return {
     now,
     accounts,
+    cards,
+    invoices,
     categories,
     hasAccounts: active.length > 0,
     balance: totalBalance(accounts, flowsByAccount),

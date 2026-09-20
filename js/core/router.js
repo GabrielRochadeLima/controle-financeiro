@@ -8,13 +8,15 @@
 export function createRouter(routes, { outlet, notFound = '/', onChange }) {
   let token = 0; // descarta renderizações antigas se o usuário navegar rápido
 
-  const currentPath = () => {
-    const path = location.hash.replace(/^#/, '') || '/';
-    return path.split('?')[0];
+  // "#/cartao?id=123" => path "/cartao", params { id: "123" }
+  const current = () => {
+    const [path, query = ''] = (location.hash.replace(/^#/, '') || '/').split('?');
+    return { path, params: Object.fromEntries(new URLSearchParams(query)) };
   };
+  const currentPath = () => current().path;
 
   async function render() {
-    const path = currentPath();
+    const { path, params } = current();
     const load = routes[path];
     if (!load) { location.replace(`#${notFound}`); return; }
 
@@ -24,7 +26,7 @@ export function createRouter(routes, { outlet, notFound = '/', onChange }) {
       const page = await load();
       if (mine !== token) return;
       outlet.replaceChildren();
-      await page.mount(outlet);
+      await page.mount(outlet, params);
       window.scrollTo(0, 0);
       outlet.focus({ preventScroll: true });
     } catch (err) {

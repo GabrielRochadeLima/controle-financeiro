@@ -3,7 +3,7 @@ import { html, mount, $, $$ } from '../core/dom.js';
 import { formatMoney, parseMoney } from '../core/format.js';
 import { ACCOUNT_TYPES, validateAccount } from '../core/validation.js';
 import { emitDataChanged } from '../core/events.js';
-import { friendlyError } from '../core/supabase.js';
+import { friendlyError, isInUseError } from '../core/supabase.js';
 import {
   createAccount, deleteAccount, loadAccountsWithBalance, setAccountStatus, updateAccount,
 } from '../services/accounts.js';
@@ -152,8 +152,8 @@ function openAccountForm(account, all) {
       close();
       emitDataChanged();
     } catch (err) {
-      // 23503 = foreign key: a conta já tem movimentações
-      showError(err?.code === '23503'
+      // a conta já tem movimentações (FK com ON DELETE RESTRICT)
+      showError(isInUseError(err)
         ? 'Esta conta tem movimentações. Arquive-a em vez de excluir.'
         : friendlyError(err, 'Não foi possível excluir a conta.'));
     }

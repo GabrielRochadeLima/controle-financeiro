@@ -1,13 +1,14 @@
-// Dashboard (Fase 1): saldo, resumo do mês, gastos por categoria e últimas
-// movimentações. Widgets de fatura, vencimentos, orçamento e metas entram nas
-// fases 3–5, quando os dados correspondentes existirem.
+// Dashboard: saldo, resumo do mês, faturas próximas, gastos por categoria e últimas
+// movimentações. Widgets de orçamento, previsão e metas entram nas fases 4–5.
 import { html, mount } from '../core/dom.js';
-import { formatMoney, formatMonth, formatPercent, greeting } from '../core/format.js';
+import { formatDate, formatMoney, formatMonth, formatPercent, greeting } from '../core/format.js';
+import { STATUS_LABELS } from '../core/cards.js';
 import { loadDashboard } from '../services/dashboard.js';
 import { getProfile } from '../services/reference.js';
 import { emptyState, errorState, loadingState } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
 import { transactionItem } from '../ui/transaction-item.js';
+import { STATUS_BADGE } from './cards.js';
 
 const TOP_CATEGORIES = 5;
 
@@ -31,7 +32,7 @@ function categoryRow(cat) {
 
 /** View pura: dados -> HTML. Não toca em rede nem no DOM (fácil de testar). */
 export function dashboardView(data, name = '') {
-  const { now, summary, balance, byCategory, recent, hasAccounts, categories, accounts } = data;
+  const { now, summary, balance, byCategory, recent, hasAccounts, categories, accounts, cards = [], invoices = [] } = data;
   const first = name.trim().split(/\s+/)[0];
 
   const spending = byCategory.length
@@ -45,7 +46,7 @@ export function dashboardView(data, name = '') {
 
   const latest = recent.length
     ? html`<div class="card card-flat"><ul class="list">
-        ${recent.map((t) => transactionItem(t, { categories, accounts }))}</ul></div>`
+        ${recent.map((t) => transactionItem(t, { categories, accounts, cards }))}</ul></div>`
     : html`<div class="card">${emptyState({
         iconName: 'receipt',
         title: 'Nenhuma movimentação ainda',
@@ -83,6 +84,27 @@ export function dashboardView(data, name = '') {
           <span class="stat-value money ${summary.left < 0 ? 'text-danger' : ''}">${formatMoney(summary.left)}</span>
         </div>
       </section>
+
+      ${invoices.length > 0 && html`
+        <section class="section">
+          <div class="section-head"><h2>Faturas</h2><a href="#/cartoes">Ver cartões</a></div>
+          <div class="card card-flat"><ul class="list">
+            ${invoices.map((i) => html`
+              <li>
+                <a class="list-item dash-invoice" href="#/cartao?id=${i.credit_card_id}&amp;inv=${i.id}">
+                  <span class="avatar">${icon('card')}</span>
+                  <span class="list-item-main">
+                    <span class="list-item-title">${i.card.name}</span>
+                    <span class="list-item-sub">Vence ${formatDate(i.due_date)} · fecha ${formatDate(i.closing_date)}</span>
+                  </span>
+                  <span class="list-item-end">
+                    <span class="money">${formatMoney(i.total_amount)}</span>
+                    <span class="badge ${STATUS_BADGE[i.status]}">${STATUS_LABELS[i.status]}</span>
+                  </span>
+                </a>
+              </li>`)}
+          </ul></div>
+        </section>`}
 
       ${!hasAccounts && html`
         <section class="card">${emptyState({

@@ -20,7 +20,8 @@ const routes = {
   '/movimentacoes': page('transactions'),
   '/contas': page('accounts'),
   '/categorias': page('categories'),
-  '/cartoes': soon('cartoes'),
+  '/cartoes': page('cards'),
+  '/cartao': page('card'),
   '/orcamentos': soon('orcamentos'),
   '/metas': soon('metas'),
   '/investimentos': soon('investimentos'),
@@ -50,8 +51,9 @@ async function start() {
     outlet,
     notFound: '/',
     onChange: (path) => {
-      renderBottomNav(bottomNav, path);
-      renderSidebar(sidebar, path);
+      const navPath = path === '/cartao' ? '/cartoes' : path; // detalhe do cartão acende "Cartões"
+      renderBottomNav(bottomNav, navPath);
+      renderSidebar(sidebar, navPath);
     },
   });
 

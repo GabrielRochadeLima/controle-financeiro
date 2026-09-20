@@ -5,7 +5,9 @@ import { formatMonth, formatRelativeDate, toISODate } from '../core/format.js';
 import { TYPES } from '../core/finance.js';
 import { friendlyError } from '../core/supabase.js';
 import { getAccounts, getCategories } from '../services/reference.js';
+import { getCards } from '../services/cards.js';
 import { listTransactions } from '../services/transactions.js';
+import { openPlanDetail } from '../ui/installment-plan.js';
 import { openTransactionForm } from '../ui/quick-add.js';
 import { emptyState, errorState, loadingState } from '../ui/states.js';
 import { transactionItem } from '../ui/transaction-item.js';
@@ -18,6 +20,7 @@ const FILTERS = [
   [TYPES.INCOME, 'Receitas'],
   [TYPES.TRANSFER, 'Transferências'],
   [TYPES.INVESTMENT, 'Investimentos'],
+  [TYPES.INVOICE_PAYMENT, 'Faturas'],
 ];
 
 // Filtros vivem no módulo: ao editar uma linha a tela recarrega e o usuário
@@ -70,9 +73,9 @@ function groupByDay(rows) {
 export async function mountPage(outlet) {
   mount(outlet, loadingState(3));
 
-  let accounts; let categories;
+  let accounts; let categories; let cards;
   try {
-    [accounts, categories] = await Promise.all([getAccounts(), getCategories()]);
+    [accounts, categories, cards] = await Promise.all([getAccounts(), getCategories(), getCards()]);
   } catch (err) {
     console.error('[movimentacoes]', err);
     mount(outlet, html`<div class="page">${errorState()}</div>`);
@@ -112,7 +115,7 @@ export async function mountPage(outlet) {
       <div class="day-group">
         <div class="day-head"><span>${formatRelativeDate(g.date)}</span></div>
         <div class="card card-flat"><ul class="list">
-          ${g.rows.map((t) => transactionItem(t, { categories, accounts }, { interactive: true, showDate: false }))}
+          ${g.rows.map((t) => transactionItem(t, { categories, accounts, cards }, { interactive: true, showDate: false }))}
         </ul></div>
       </div>`)}</div>`);
   }
@@ -157,9 +160,14 @@ export async function mountPage(outlet) {
   const openRow = (li) => {
     const transaction = rows.find((r) => r.id === li?.dataset.id);
     if (!transaction) return;
-    // Compras no cartão e pagamentos de fatura têm regras próprias (fatura/parcela): Fase 3.
-    if (transaction.credit_card_id || transaction.type === TYPES.INVOICE_PAYMENT) {
-      toast.info('Compras e faturas de cartão serão editadas na Fase 3.');
+    // Pagamento de fatura: leva para a fatura (para desfazer o pagamento, se preciso).
+    if (transaction.type === TYPES.INVOICE_PAYMENT) {
+      location.hash = `#/cartao?id=${transaction.credit_card_id}&inv=${transaction.invoice_id}`;
+      return;
+    }
+    // Compra parcelada: detalhe do plano (parcelas, editar, excluir com escolha de impacto).
+    if (transaction.installment_plan_id) {
+      openPlanDetail({ planId: transaction.installment_plan_id, number: transaction.installment_number });
       return;
     }
     openTransactionForm({ transaction });

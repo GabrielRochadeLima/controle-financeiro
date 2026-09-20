@@ -4,7 +4,6 @@ import { html, mount } from '../core/dom.js';
 import { emptyState } from '../ui/states.js';
 
 const MODULES = {
-  cartoes: { title: 'Cartões', phase: 3, icon: 'card', text: 'Cartões, faturas, limite disponível e compras parceladas.' },
   orcamentos: { title: 'Orçamentos', phase: 4, icon: 'pie', text: 'Defina limites mensais por categoria e acompanhe o consumo.' },
   metas: { title: 'Metas', phase: 5, icon: 'target', text: 'Objetivos financeiros com contribuições e progresso.' },
   investimentos: { title: 'Investimentos', phase: 5, icon: 'trend', text: 'Registro dos valores investidos.' },

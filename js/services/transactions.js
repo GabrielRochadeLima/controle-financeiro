@@ -5,7 +5,8 @@ import { unwrap } from './db.js';
 export const PAGE_SIZE = 30;
 
 const COLUMNS = 'id, type, amount, date, description, notes, account_id, to_account_id, ' +
-  'credit_card_id, category_id, subcategory_id';
+  'credit_card_id, invoice_id, category_id, subcategory_id, installment_plan_id, installment_number, ' +
+  'plan:installment_plans(installments_count)';
 
 /**
  * @param {{ from: string, to: string, type?: string, search?: string, page?: number }} f
