@@ -1,43 +1,24 @@
 // Dashboard: saldo, resumo do mês, faturas próximas, gastos por categoria e últimas
 // movimentações. Widgets de orçamento, previsão e metas entram nas fases 4–5.
 import { html, mount } from '../core/dom.js';
-import { formatDate, formatMoney, formatMonth, formatPercent, greeting } from '../core/format.js';
+import { formatDate, formatMoney, formatMonth, greeting } from '../core/format.js';
 import { STATUS_LABELS } from '../core/cards.js';
 import { loadDashboard } from '../services/dashboard.js';
 import { getProfile } from '../services/reference.js';
 import { emptyState, errorState, loadingState } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
+import { bindDonut, bindMonthly, categoryDonut, monthlyChart } from '../ui/charts.js';
 import { transactionItem } from '../ui/transaction-item.js';
 import { STATUS_BADGE } from './cards.js';
 
-const TOP_CATEGORIES = 5;
-
-// A cor vem do banco (validada lá), mas nunca vai para um atributo style sem checagem.
-const safeColor = (c) => (/^#[0-9a-f]{6}$/i.test(c || '') ? c : 'var(--primary)');
-
-function categoryRow(cat) {
-  return html`
-    <li class="cat-row">
-      <div class="cat-row-head">
-        <span class="cat-row-name"><span>${cat.icon}</span><span>${cat.name}</span></span>
-        <span class="cat-row-value money">
-          ${formatMoney(cat.total)} <span class="cat-row-pct">${formatPercent(cat.percent)}</span>
-        </span>
-      </div>
-      <div class="bar" role="img" aria-label="${cat.name}: ${formatPercent(cat.percent)} dos gastos">
-        <span style="--value:${cat.percent.toFixed(1)}%; --bar-color:${safeColor(cat.color)}"></span>
-      </div>
-    </li>`;
-}
-
 /** View pura: dados -> HTML. Não toca em rede nem no DOM (fácil de testar). */
 export function dashboardView(data, name = '') {
-  const { now, summary, balance, byCategory, recent, hasAccounts, categories, accounts, cards = [], invoices = [] } = data;
+  const { now, summary, balance, byCategory, recent, hasAccounts, categories, accounts, cards = [], invoices = [], trend = null } = data;
   const first = name.trim().split(/\s+/)[0];
 
-  const spending = byCategory.length
-    ? html`<div class="card card-flat"><ul class="list">
-        ${byCategory.slice(0, TOP_CATEGORIES).map(categoryRow)}</ul></div>`
+  const donut = categoryDonut(byCategory);
+  const spending = donut
+    ? html`<div class="card">${donut}</div>`
     : html`<div class="card">${emptyState({
         iconName: 'pie',
         title: 'Sem gastos neste mês',
@@ -106,6 +87,12 @@ export function dashboardView(data, name = '') {
           </ul></div>
         </section>`}
 
+      ${trend && html`
+        <section class="section">
+          <div class="section-head"><h2>Receitas × despesas</h2><span class="text-secondary">últimos 6 meses</span></div>
+          <div class="card">${monthlyChart(trend)}</div>
+        </section>`}
+
       ${!hasAccounts && html`
         <section class="card">${emptyState({
           iconName: 'wallet',
@@ -136,6 +123,8 @@ export async function mountPage(outlet) {
   try {
     const [data, profile] = await Promise.all([loadDashboard(), getProfile()]);
     mount(outlet, dashboardView(data, profile.displayName));
+    bindDonut(outlet);
+    if (data.trend) bindMonthly(outlet, data.trend);
   } catch (err) {
     console.error('[dashboard]', err);
     mount(outlet, html`<div class="page">${errorState()}</div>`);

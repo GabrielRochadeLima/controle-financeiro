@@ -4,6 +4,7 @@ import { supabase } from '../core/supabase.js';
 import { toISODate, todayISO } from '../core/format.js';
 import { accountBalance, totalBalance, periodSummary, spendingByCategory } from '../core/finance.js';
 import { addDays, invoiceStatus } from '../core/cards.js';
+import { chartRange, monthSeries } from '../core/charts.js';
 import { getAccounts, getCategories } from './reference.js';
 import { getCards, loadUnpaidInvoices } from './cards.js';
 import { unwrap } from './db.js';
@@ -13,7 +14,9 @@ export async function loadDashboard() {
   const today = todayISO();
   const monthStart = toISODate(new Date(now.getFullYear(), now.getMonth(), 1));
 
-  const [accounts, categories, cards, unpaid, flows, monthTx, recent] = await Promise.all([
+  const range = chartRange(today, 6);
+
+  const [accounts, categories, cards, unpaid, flows, trendRows, monthTx, recent] = await Promise.all([
     getAccounts(),
     getCategories(),
     getCards(),
@@ -21,6 +24,9 @@ export async function loadDashboard() {
     // o resto da tela inicial continua funcionando.
     loadUnpaidInvoices().catch((err) => { console.error('[dashboard] faturas indisponíveis', err); return []; }),
     unwrap(supabase.rpc('account_flows', { p_until: today })),
+    // Série mensal do gráfico (migration 004). Também é opcional: sem ela só o gráfico some.
+    unwrap(supabase.rpc('monthly_flows', { p_from: range.from, p_until: today }))
+      .catch((err) => { console.error('[dashboard] gráfico mensal indisponível', err); return null; }),
     // "Do mês" = do dia 1 até hoje: lançamentos futuros (parcelas, recorrências)
     // ainda não aconteceram e pertencem à previsão, não ao gasto realizado.
     unwrap(supabase.from('transactions')
@@ -52,6 +58,7 @@ export async function loadDashboard() {
     accounts,
     cards,
     invoices,
+    trend: trendRows ? monthSeries(trendRows, today, 6) : null,
     categories,
     hasAccounts: active.length > 0,
     balance: totalBalance(accounts, flowsByAccount),

@@ -1,0 +1,65 @@
+/* Gráficos do dashboard. Cores só por tokens (--viz-*); traços finos e grade discreta. */
+
+/* cada elemento colorido define --c pela classe do "slot" */
+.viz-c1 { --c: var(--viz-1); } .viz-c2 { --c: var(--viz-2); } .viz-c3 { --c: var(--viz-3); }
+.viz-c4 { --c: var(--viz-4); } .viz-c5 { --c: var(--viz-5); } .viz-c6 { --c: var(--viz-6); }
+.viz-other { --c: var(--viz-other); }
+
+.dot { display: inline-block; flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--c); }
+
+/* ---------- rosca ---------- */
+.donut { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); }
+.donut-svg { width: min(100%, 190px); height: auto; }
+.donut-seg { stroke: var(--c); stroke-width: 14; transition: opacity 0.15s, stroke-width 0.15s; }
+.donut[data-active]:not([data-active=""]) .donut-seg:not(.is-active) { opacity: 0.3; }
+.donut-seg.is-active { stroke-width: 17; }
+.donut-label { font-size: 7px; fill: var(--text-secondary); }
+.donut-value { font-size: 11px; font-weight: 700; fill: var(--text); }
+
+.legend-list { list-style: none; margin: 0; padding: 0; width: 100%; }
+.legend-row {
+  display: flex; align-items: center; gap: var(--space-3); width: 100%; min-height: 44px;
+  padding: 0 var(--space-2); border: 0; border-radius: var(--radius-sm);
+  background: none; color: inherit; text-align: left;
+}
+.legend-row:hover { background: var(--surface-2); }
+.legend-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.legend-value { font-size: var(--fs-sm); font-weight: 700; }
+.pct { color: var(--text-secondary); font-weight: 400; font-size: var(--fs-xs); }
+
+/* ---------- barras por mês ---------- */
+.mchart { display: flex; flex-direction: column; gap: var(--space-3); }
+.legend-inline { display: flex; gap: var(--space-4); font-size: var(--fs-sm); color: var(--text-secondary); }
+.legend-inline span { display: inline-flex; align-items: center; gap: 6px; }
+
+.mchart-svg { display: block; width: 100%; height: auto; }
+.mb-grid, .mb-axis { stroke: var(--border); stroke-width: 1; }
+.mb-tick, .mb-x { font-size: 10px; fill: var(--text-secondary); }
+.mb-x { text-transform: capitalize; }
+.mb-x.is-current { font-weight: 700; fill: var(--text); }
+.mb-bar { fill: var(--c); }
+.mb-sel { fill: var(--surface-2); opacity: 0; transition: opacity 0.12s; }
+.mb-group.is-selected .mb-sel { opacity: 1; }
+.mb-hit { fill: transparent; cursor: pointer; }
+.mb-group:focus { outline: none; }
+.mb-group:focus-visible .mb-sel { opacity: 1; stroke: var(--primary); stroke-width: 2; }
+
+.mb-detail {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-4);
+  font-size: var(--fs-sm); min-height: 2.6em;
+}
+.detail-item { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.chart-note, .chart-empty { font-size: var(--fs-xs); color: var(--text-secondary); }
+.chart-empty { padding: var(--space-4) 0; text-align: center; font-size: var(--fs-sm); }
+
+/* ---------- visão em tabela (equivalente acessível do gráfico) ---------- */
+.viz-table summary { min-height: 40px; display: flex; align-items: center; cursor: pointer; color: var(--primary); font-weight: 600; font-size: var(--fs-sm); }
+.table-scroll { overflow-x: auto; }
+.viz-table table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
+.viz-table th, .viz-table td { padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.viz-table thead th, .viz-table tbody th { text-align: left; font-weight: 600; text-transform: capitalize; }
+.viz-table thead th { color: var(--text-secondary); font-weight: 500; }
+
+@media (prefers-reduced-motion: reduce) {
+  .donut-seg, .mb-sel { transition: none; }
+}
