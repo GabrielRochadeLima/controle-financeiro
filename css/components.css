@@ -21,6 +21,10 @@
 .btn-danger { background: var(--danger); color: #fff; }
 .btn-ghost { background: transparent; border-color: var(--border); }
 .btn-block { width: 100%; }
+.btn-link {
+  min-height: 40px; border: 0; background: none; color: var(--primary); font-weight: 600;
+}
+.btn-link:hover { text-decoration: underline; }
 .btn-sm { min-height: 40px; padding: 0 var(--space-3); font-size: var(--fs-sm); }
 
 .btn-icon {

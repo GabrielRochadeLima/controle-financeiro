@@ -12,8 +12,3 @@
 .auth-card .form { margin-top: var(--space-4); }
 .auth-card #view-forgot .form,
 .auth-card #view-reset .form { margin-top: 0; }
-
-.btn-link {
-  min-height: 40px; border: 0; background: none; color: var(--primary); font-weight: 600;
-}
-.btn-link:hover { text-decoration: underline; }
