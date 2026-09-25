@@ -66,13 +66,13 @@ export function niceScale(maxValue, targetTicks = 3) {
 
 const trimmed = (n) => (Math.round(n * 10) / 10).toString().replace('.', ',');
 
-/** Rótulo curto para o eixo: 0, R$ 950, R$ 1,5 mil, R$ 12 mil, R$ 1,2 mi. */
+/** Rótulo curto para o eixo (sem "R$": o valor exato com moeda aparece no detalhe): 0, 950, 1,5 mil, 12 mil, 1,2 mi. */
 export function compactMoney(value) {
   const v = Math.abs(value);
   if (v === 0) return '0';
-  if (v >= 1_000_000) return `R$ ${trimmed(v / 1_000_000)} mi`;
-  if (v >= 1_000) return `R$ ${trimmed(v / 1_000)} mil`;
-  return `R$ ${trimmed(v)}`;
+  if (v >= 1_000_000) return `${trimmed(v / 1_000_000)} mi`;
+  if (v >= 1_000) return `${trimmed(v / 1_000)} mil`;
+  return trimmed(v);
 }
 
 // ---------- barras agrupadas (receitas × despesas) ----------
@@ -89,7 +89,7 @@ export function roundedTopPath(x, y, w, h, r = 4) {
  * despesa à direita) separadas por um respiro de `gap` px; barras de no máximo `maxBar` px.
  * A área de toque de cada mês é a coluna inteira (bem maior que a barra).
  */
-export function barLayout(series, { width = 340, height = 200, pad = { top: 10, right: 8, bottom: 26, left: 46 }, maxBar = 24, gap = 2 } = {}) {
+export function barLayout(series, { width = 340, height = 200, pad = { top: 10, right: 8, bottom: 26, left: 40 }, maxBar = 24, gap = 2 } = {}) {
   const plot = { x: pad.left, y: pad.top, w: width - pad.left - pad.right, h: height - pad.top - pad.bottom };
   const peak = Math.max(0, ...series.flatMap((m) => [m.income, m.expense]));
   const scale = niceScale(peak);

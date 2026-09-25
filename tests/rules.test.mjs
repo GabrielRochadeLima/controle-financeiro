@@ -105,7 +105,7 @@ eq('escala 4.300', niceScale(4300).ticks, [0, 2000, 4000, 6000]);
 eq('escala 950', niceScale(950).ticks, [0, 500, 1000]);
 eq('escala 12.400', niceScale(12400).max, 15000);
 for (const v of [1, 7, 99, 1234, 56789, 1e6 + 1]) { const sc = niceScale(v); if (!(sc.max >= v && sc.ticks[0] === 0 && sc.ticks.length <= 6)) { fails++; console.log('FALHA escala', v, sc); } }
-eq('rótulos compactos', [0, 950, 1000, 1500, 12000, 1200000].map(compactMoney), ['0', 'R$ 950', 'R$ 1 mil', 'R$ 1,5 mil', 'R$ 12 mil', 'R$ 1,2 mi']);
+eq('rótulos compactos', [0, 950, 1000, 1500, 12000, 1200000].map(compactMoney), ['0', '950', '1 mil', '1,5 mil', '12 mil', '1,2 mi']);
 eq('barra: base reta e topo arredondado', roundedTopPath(10, 20, 24, 50, 4).startsWith('M10 70V24A4 4 0 0 1 14 20'), true);
 eq('barra zerada não desenha', roundedTopPath(10, 20, 24, 0, 4), '');
 eq('raio limitado pela altura', roundedTopPath(0, 0, 24, 2, 4).includes('A2 2'), true);
