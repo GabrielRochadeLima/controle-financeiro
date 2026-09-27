@@ -5,8 +5,11 @@ import { toISODate, todayISO } from '../core/format.js';
 import { accountBalance, totalBalance, periodSummary, spendingByCategory } from '../core/finance.js';
 import { addDays, invoiceStatus } from '../core/cards.js';
 import { chartRange, monthSeries } from '../core/charts.js';
+import { forecastMonth } from '../core/recurring.js';
 import { getAccounts, getCategories } from './reference.js';
 import { getCards, loadUnpaidInvoices } from './cards.js';
+import { getBudgets } from './budgets.js';
+import { getRecurring } from './recurring.js';
 import { unwrap } from './db.js';
 
 export async function loadDashboard() {
@@ -16,7 +19,7 @@ export async function loadDashboard() {
 
   const range = chartRange(today, 6);
 
-  const [accounts, categories, cards, unpaid, flows, trendRows, monthTx, recent] = await Promise.all([
+  const [accounts, categories, cards, unpaid, flows, trendRows, monthTx, recent, budgets, recurring] = await Promise.all([
     getAccounts(),
     getCategories(),
     getCards(),
@@ -39,6 +42,9 @@ export async function loadDashboard() {
       .order('date', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(5)),
+    // Orçamentos e recorrências (Fase 4): widgets extras, também com falha suave.
+    getBudgets().catch((err) => { console.error('[dashboard] orçamentos indisponíveis', err); return []; }),
+    getRecurring().catch((err) => { console.error('[dashboard] recorrências indisponíveis', err); return []; }),
   ]);
 
   const flowsByAccount = Object.fromEntries(flows.map((f) => [f.account_id, f]));
@@ -53,6 +59,26 @@ export async function loadDashboard() {
     .filter((i) => i.card)
     .slice(0, 3); // já vêm ordenadas por vencimento
 
+  const summary = periodSummary(monthTx);
+  const byCategory = spendingByCategory(monthTx, categories);
+
+  // Orçamentos estourados ou perto do limiar de aviso de cada um, os 3 mais críticos.
+  const budgetAlerts = budgets
+    .map((b) => {
+      const category = categories.get(b.category_id);
+      if (!category) return null;
+      const spent = byCategory.find((c) => c.categoryId === b.category_id)?.total ?? 0;
+      const amount = Number(b.amount);
+      const ratio = amount ? (spent / amount) * 100 : 0;
+      return { category, amount, spent, ratio, threshold: b.alert_threshold };
+    })
+    .filter((a) => a && a.ratio >= a.threshold)
+    .sort((a, b) => b.ratio - a.ratio)
+    .slice(0, 3);
+
+  // Previsão simples: o que já aconteceu + o que as recorrências ativas ainda vão lançar este mês.
+  const forecast = forecastMonth(recurring, today, { income: summary.income, expense: summary.expense });
+
   return {
     now,
     accounts,
@@ -63,8 +89,10 @@ export async function loadDashboard() {
     hasAccounts: active.length > 0,
     balance: totalBalance(accounts, flowsByAccount),
     accountBalances: Object.fromEntries(active.map((a) => [a.id, accountBalance(a, flowsByAccount[a.id])])),
-    summary: periodSummary(monthTx),
-    byCategory: spendingByCategory(monthTx, categories),
+    summary,
+    byCategory,
     recent,
+    budgetAlerts,
+    forecast,
   };
 }

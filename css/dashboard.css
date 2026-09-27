@@ -2,6 +2,10 @@
 
 .dash-cols { display: flex; flex-direction: column; gap: var(--space-5); }
 
+.forecast-card { display: flex; flex-direction: column; gap: var(--space-2); }
+.forecast-head { display: flex; align-items: center; gap: var(--space-2); }
+.forecast-head .icon { width: 20px; height: 20px; color: var(--primary); }
+
 .greeting { display: flex; flex-direction: column; gap: 2px; }
 .greeting p { color: var(--text-secondary); font-size: var(--fs-sm); }
 

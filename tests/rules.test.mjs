@@ -1,10 +1,11 @@
 // Testes das regras puras (sem dependências): node tests/rules.test.mjs
 // Cobrem fatura/vencimento/parcelas (js/core/cards.js) e validações (js/core/validation.js).
 import { addMonths, cardLimit, currentInvoice, invoiceFor, invoiceStatus, planPurchase, splitInstallments } from '../js/core/cards.js';
-import { validateCard, validateTransaction } from '../js/core/validation.js';
+import { validateBudget, validateCard, validateRecurring, validateTransaction } from '../js/core/validation.js';
 import { parseMoney } from '../js/core/format.js';
 import { NO_CATEGORY, activeChips, activeGroups, clearGroup, emptyFilters, isUuid, parseSource, resolvePeriod, validateFilters } from '../js/core/filters.js';
 import { barLayout, chartRange, closedMonthsAverage, compactMoney, donutItems, donutSegments, monthSeries, niceScale, roundedTopPath } from '../js/core/charts.js';
+import { forecastMonth, monthEnd, nextDate, pendingDates, upcomingThisMonth } from '../js/core/recurring.js';
 
 let fails = 0;
 const eq = (label, got, want) => {
@@ -156,6 +157,66 @@ eq('chips', activeChips({ ...emptyFilters(), source: 'a:' + A1, categoryId: 'c1'
   ['Nubank', '🍽️ Alimentação › Mercado', 'A partir de R$ 50,00', '01/09/2026 – 15/09/2026']);
 eq('chip de cartão e faixa de valor', activeChips({ ...emptyFilters(), source: 'c:k1', min: 10, max: 20 }, fref).map((c) => c.key + ':' + c.label.replace(/ /g, ' ')), ['source:💳 Cartão', 'value:R$ 10,00 – R$ 20,00']);
 eq('limpar grupo categoria', clearGroup({ ...emptyFilters(), categoryId: 'c1', subcategoryId: 's1', min: 1 }, 'category'), { ...emptyFilters(), min: 1 });
+
+// ---- recorrências ----
+eq('próxima data: semanal', nextDate('2026-09-24', 'weekly'), '2026-10-01');
+eq('próxima data: mensal (dia 31 vira fim de fevereiro)', nextDate('2026-01-31', 'monthly'), '2026-02-28');
+eq('próxima data: anual', nextDate('2026-09-24', 'yearly'), '2027-09-24');
+eq('fim do mês', monthEnd('2026-02-10'), '2026-02-28');
+eq('fim do mês bissexto', monthEnd('2028-02-01'), '2028-02-29');
+
+const rMonthly = { status: 'active', frequency: 'monthly', start_date: '2026-06-15', end_date: null, generated_until: null };
+eq('mensal: nada gerado ainda, hoje é o início', pendingDates(rMonthly, '2026-06-15'), ['2026-06-15']);
+eq('mensal: várias competências em atraso', pendingDates(rMonthly, '2026-09-20'), ['2026-06-15', '2026-07-15', '2026-08-15', '2026-09-15']);
+eq('mensal: já gerado até o mês passado, só falta o atual', pendingDates({ ...rMonthly, generated_until: '2026-08-15' }, '2026-09-20'), ['2026-09-15']);
+eq('mensal: em dia, nada a gerar', pendingDates({ ...rMonthly, generated_until: '2026-09-15' }, '2026-09-20'), []);
+eq('pausada não gera', pendingDates({ ...rMonthly, status: 'paused' }, '2026-09-20'), []);
+eq('regra ainda não começou', pendingDates(rMonthly, '2026-06-01'), []);
+eq('respeita o fim da regra', pendingDates({ ...rMonthly, end_date: '2026-07-20' }, '2026-09-20'), ['2026-06-15', '2026-07-15']);
+eq('trava de segurança (limit)', pendingDates({ ...rMonthly, start_date: '2000-01-15' }, '2026-09-20', 5).length, 5);
+
+eq('previsão: nada pendente este mês (já gerado)', upcomingThisMonth({ ...rMonthly, generated_until: '2026-09-15' }, '2026-09-20'), []);
+eq('previsão: falta a ocorrência deste mês', upcomingThisMonth({ ...rMonthly, generated_until: '2026-08-15' }, '2026-09-05'), ['2026-09-15']);
+eq('previsão: regra semanal com mais de uma ocorrência no mês', upcomingThisMonth(
+  { status: 'active', frequency: 'weekly', start_date: '2026-09-01', end_date: null, generated_until: '2026-09-01' },
+  '2026-09-02',
+), ['2026-09-08', '2026-09-15', '2026-09-22', '2026-09-29']);
+eq('previsão: regra que começa ainda este mês, no futuro', upcomingThisMonth(rMonthly, '2026-06-01'), ['2026-06-15']);
+
+const forecastRules = [
+  // aluguel, dia 28: já gerado em agosto, a de setembro ainda não venceu (hoje é dia 20)
+  { type: 'expense', amount: 1800, status: 'active', frequency: 'monthly', start_date: '2026-01-28', end_date: null, generated_until: '2026-08-28' },
+  // salário, também dia 28: regra nova, ainda não gerou nenhuma ocorrência
+  { type: 'income', amount: 5000, status: 'active', frequency: 'monthly', start_date: '2026-09-28', end_date: null, generated_until: null },
+  { type: 'expense', amount: 999, status: 'paused', frequency: 'monthly', start_date: '2026-09-01', end_date: null, generated_until: null },
+];
+const fc = forecastMonth(forecastRules, '2026-09-20', { income: 1000, expense: 500 });
+eq('previsão do mês: soma realizado + recorrências pendentes', [fc.income, fc.expense, fc.pendingIncome, fc.pendingExpense, fc.left],
+  [6000, 2300, 5000, 1800, 3700]);
+
+// ---- validação: recorrência e orçamento ----
+const recRef = {
+  accounts: [{ id: 'a1', name: 'N', status: 'active' }],
+  cards: [{ id: 'k1', status: 'active' }, { id: 'k2', status: 'archived' }],
+  categories: new Map([['c1', { id: 'c1', kind: 'expense' }], ['c2', { id: 'c2', kind: 'income' }]]),
+  subcategories: [],
+};
+const recBase = { type: 'expense', description: 'Aluguel', amount: 1800, account_id: 'a1', frequency: 'monthly', start_date: '2026-09-01' };
+eq('recorrência válida', validateRecurring(recBase, recRef).ok, true);
+eq('recorrência sem descrição', validateRecurring({ ...recBase, description: '' }, recRef).ok, false);
+eq('recorrência sem conta nem cartão', validateRecurring({ ...recBase, account_id: null }, recRef).ok, false);
+eq('recorrência no cartão (despesa)', validateRecurring({ ...recBase, account_id: null, credit_card_id: 'k1' }, recRef).ok, true);
+eq('receita não pode ir no cartão', validateRecurring({ ...recBase, type: 'income', account_id: null, credit_card_id: 'k1' }, recRef).ok, false);
+eq('cartão arquivado só permitido na edição', validateRecurring({ ...recBase, account_id: null, credit_card_id: 'k2' }, recRef).ok, false);
+eq('cartão arquivado permitido ao editar a própria regra', validateRecurring({ ...recBase, account_id: null, credit_card_id: 'k2', currentCardId: 'k2' }, recRef).ok, true);
+eq('frequência inválida', validateRecurring({ ...recBase, frequency: 'daily' }, recRef).ok, false);
+eq('fim antes do início', validateRecurring({ ...recBase, end_date: '2026-08-01' }, recRef).ok, false);
+eq('categoria do tipo errado é ignorada, não barra o salvamento', validateRecurring({ ...recBase, category_id: 'c2' }, recRef).value.category_id, null);
+
+eq('orçamento válido', validateBudget({ amount: 500, alert_threshold: 80 }).ok, true);
+eq('orçamento valor zero', validateBudget({ amount: 0, alert_threshold: 80 }).ok, false);
+eq('orçamento aviso fora da faixa', validateBudget({ amount: 500, alert_threshold: 150 }).ok, false);
+eq('orçamento aviso fracionado', validateBudget({ amount: 500, alert_threshold: 80.5 }).ok, false);
 
 console.log(fails ? `\n${fails} FALHA(S)` : 'todos os testes passaram');
 process.exitCode = fails ? 1 : 0;

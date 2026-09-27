@@ -8,6 +8,7 @@ import { renderBottomNav, renderSidebar } from './ui/nav.js';
 import { onDataChanged } from './core/events.js';
 import { toast } from './ui/toast.js';
 import { ensureBootstrapped } from './services/reference.js';
+import { ensureGeneratedToday } from './services/recurring.js';
 
 const page = (name) => () => import(`./pages/${name}.js`);
 const soon = (key) => () => import('./pages/coming-soon.js').then((m) => m.forRoute(key));
@@ -22,7 +23,8 @@ const routes = {
   '/categorias': page('categories'),
   '/cartoes': page('cards'),
   '/cartao': page('card'),
-  '/orcamentos': soon('orcamentos'),
+  '/orcamentos': page('orcamentos'),
+  '/recorrencias': page('recorrencias'),
   '/metas': soon('metas'),
   '/investimentos': soon('investimentos'),
 };
@@ -39,6 +41,7 @@ async function start() {
 
   try {
     await ensureBootstrapped(session.user.id);
+    await ensureGeneratedToday(session.user.id);
   } catch (err) {
     toast.error(friendlyError(err, 'Não foi possível preparar sua conta. Recarregue a página.'));
   }

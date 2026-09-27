@@ -28,7 +28,7 @@
 .pct { color: var(--text-secondary); font-weight: 400; font-size: var(--fs-xs); }
 
 /* ---------- barras por mês ---------- */
-.mchart { display: flex; flex-direction: column; gap: var(--space-3); }
+.mchart { display: flex; flex-direction: column; gap: var(--space-3); width: 100%; max-width: 560px; margin-inline: auto; } /* no desktop o cartão é largo: sem limite o SVG cresceria junto */
 .legend-inline { display: flex; gap: var(--space-4); font-size: var(--fs-sm); color: var(--text-secondary); }
 .legend-inline span { display: inline-flex; align-items: center; gap: 6px; }
 

@@ -2,7 +2,7 @@
 
 Sistema web pessoal, **mobile-first**, para controlar despesas, receitas, contas, cartões, parcelamentos, recorrências, orçamentos, metas e investimentos. A métrica de qualidade do projeto: **registrar uma despesa em poucos segundos pelo celular**.
 
-> **Status: Fase 3 concluída** (cartões, faturas e parcelamentos, sobre as fases 1 e 2). Veja o [roadmap](#roadmap).
+> **Status: Fase 4 concluída** (recorrências, orçamentos e previsão, sobre as fases 1–3). Veja o [roadmap](#roadmap).
 
 ## Funcionalidades
 
@@ -11,14 +11,16 @@ Sistema web pessoal, **mobile-first**, para controlar despesas, receitas, contas
 | 1 | Estrutura, layout responsivo, tema claro/escuro, Supabase, autenticação, schema + RLS, dashboard básico | ✅ |
 | 2 | Contas, receitas, despesas, transferências, investimentos (aporte), categorias, **lançamento rápido** | ✅ |
 | 3 | Cartões, faturas, parcelamentos | ✅ |
-| 4 | Recorrências, orçamentos, previsões | ⏳ |
+| 3.1 | Gráficos no dashboard (categoria e tendência mensal), filtros avançados em Movimentações | ✅ |
+| 4 | Recorrências, orçamentos por categoria, previsão do mês | ✅ |
 | 5 | Metas, investimentos | ⏳ |
 | 6 | Importação CSV/Excel, leitura de PDF, IA, Open Finance, 2FA | 🔮 futuro |
 
 O que já funciona:
 
 - **Lançamento rápido** (botão **+** no centro da barra inferior): digite o valor (`4590` vira `45,90`), toque na categoria e na conta, salve. A última conta usada já vem marcada, as categorias mais usadas aparecem primeiro e o tipo lembra o último usado. Descrição, observações e subcategoria são opcionais. Despesa, receita, transferência e investimento (aporte).
-- **Movimentações**: lista por mês agrupada por dia, busca por descrição, filtro por tipo, "carregar mais" e edição/exclusão ao tocar numa linha.
+- **Movimentações**: lista por mês (ou período personalizado) agrupada por dia, busca por descrição, filtro por tipo, **filtros avançados** (conta/cartão, categoria/subcategoria, faixa de valor, período), chips com o total do que casou com o filtro, "carregar mais" e edição/exclusão ao tocar numa linha.
+- **Dashboard com gráficos**: rosca de gastos por categoria e barras de receitas × despesas dos últimos 6 meses (com equivalente em tabela para acessibilidade), além do saldo, resumo do mês e faturas próximas.
 - **Contas**: saldo atual de cada conta, criar, editar, arquivar e excluir (só sem histórico).
 - **Categorias e subcategorias** totalmente editáveis, com ícone e cor; a exclusão avisa o impacto.
 - Login, cadastro, recuperação de senha, sessão persistente, tema claro/escuro e dashboard.
@@ -29,7 +31,11 @@ O que já funciona:
 - **Compra parcelada**: detalhe com todas as parcelas e a situação de cada fatura; editar descrição/categoria (vale para todas) e excluir com escolha do impacto (só esta parcela, esta e as próximas, ou toda a compra). Parcelas em faturas pagas são preservadas.
 - Dashboard com as faturas próximas (abertas, fechadas ou atrasadas).
 
-Orçamentos, metas e investimentos (fases 4–5) ainda não existem: esses módulos mostram uma tela "Em breve".
+- **Recorrências**: regras de lançamentos que se repetem (aluguel, assinaturas, salário — semanal, mensal ou anual), com início, fim opcional, pausar/reativar e excluir (as movimentações já geradas continuam na lista). As ocorrências são geradas automaticamente ao abrir o app (uma vez por dia) e ao entrar na tela, sempre até a data de hoje.
+- **Orçamentos**: limite mensal por categoria de despesa, com o quanto já foi gasto no mês e aviso configurável (ex.: avisar a partir de 80% do limite). O dashboard mostra os orçamentos mais críticos.
+- **Previsão do mês** no dashboard: soma o que já aconteceu com as recorrências que ainda faltam até o fim do mês (baseada só nas regras ativas, sem inventar dado).
+
+Metas e investimentos (fase 5) ainda não existem: esses módulos mostram uma tela "Em breve".
 
 ## Tecnologias
 
@@ -44,19 +50,19 @@ Orçamentos, metas e investimentos (fases 4–5) ainda não existem: esses módu
 ├── login.html              entrar / criar conta / recuperar e redefinir senha
 ├── .github/workflows/      deploy automático no GitHub Pages
 ├── manifest.webmanifest    permite "Adicionar à tela inicial" no celular
-├── css/                    variables (tokens de tema) · global · components · dashboard · forms · cards · auth · responsive
+├── css/                    variables (tokens de tema) · global · components · dashboard · forms · cards · charts · auth · responsive
 ├── js/
 │   ├── config.js           URL e chave pública do Supabase  ← você edita
 │   ├── app.js              guarda de sessão + rotas
 │   ├── login.js · theme-init.js (tema antes da 1ª pintura)
 │   ├── vendor/             supabase-js empacotado (não editar à mão)
-│   ├── core/               supabase, auth, router, store (cache), theme, format, dom (escape XSS), finance + cards (REGRAS), validation, events, memory
-│   ├── services/           acesso a dados (reference, accounts, categories, transactions, cards, dashboard)
-│   ├── ui/                 componentes: modal + confirmação, toast, estados, nav, ícones, lançamento rápido, campo de valor, formulário de cartão, detalhe de parcelamento
-│   └── pages/              uma view por rota (dashboard, transactions, accounts, categories, cards, card, settings, more, coming-soon)
-├── supabase/migrations/    001_initial_schema · 002_drop_subcategory_check · 003_cards_invoices
-├── supabase/tests/         rls_two_users.sql · cards_behaviour.sql (testes para rodar no SQL Editor)
-├── tests/                  rules.test.mjs (regras de fatura/parcela/validação: `node tests/rules.test.mjs`)
+│   ├── core/               supabase, auth, router, store (cache), theme, format, dom (escape XSS), finance + cards + recurring (REGRAS), charts, filters, validation, events, memory
+│   ├── services/           acesso a dados (reference, accounts, categories, transactions, cards, recurring, budgets, dashboard)
+│   ├── ui/                 componentes: modal + confirmação, toast, estados, nav, ícones, lançamento rápido, campo de valor, formulário de cartão, detalhe de parcelamento, gráficos, folha de filtros, formulário de recorrência, formulário de orçamento
+│   └── pages/              uma view por rota (dashboard, transactions, accounts, categories, cards, card, recorrencias, orcamentos, settings, more, coming-soon)
+├── supabase/migrations/    001_initial_schema · 002_drop_subcategory_check · 003_cards_invoices · 004_monthly_flows
+├── supabase/tests/         rls_two_users.sql · cards_behaviour.sql · monthly_flows.sql (testes para rodar no SQL Editor)
+├── tests/                  rules.test.mjs (regras de fatura/parcela/recorrência/validação: `node tests/rules.test.mjs`)
 └── assets/icons/
 ```
 
@@ -175,12 +181,19 @@ Centralizadas em [`js/core/finance.js`](js/core/finance.js) (saldos, resumos) e 
 - Mudar os dias de fechamento/vencimento de um cartão vale para compras novas; faturas já criadas mantêm as datas.
 - Pagamento só de fatura **inteira** (pagamento parcial não existe ainda).
 
+**Recorrências, orçamentos e previsão** (convenções; regras em `core/recurring.js`):
+
+- A **geração de ocorrências** roda no cliente (não é RPC nem cron no banco): a cada login/dia, e ao abrir a tela de Recorrências, o app calcula as datas que faltam (de `generated_until` até hoje) e insere as movimentações (`source = 'recurring'`). Um índice único (`recurring_id`, `data`) evita duplicar se duas abas gerarem ao mesmo tempo.
+- Uma regra **nunca gera data futura**: o que ainda não venceu este mês entra na **previsão**, não na lista de movimentações.
+- **Excluir uma regra preserva o histórico**: as movimentações já geradas continuam, só perdem o vínculo (`recurring_id` vira `null`).
+- **Orçamento** é só a categoria de despesa + limite + aviso (%); o "gasto no mês" nunca é uma coluna — é somado a partir de `transactions` (mesma fonte de Movimentações e do dashboard), para nunca divergir.
+- **Previsão do mês** = o que já aconteceu (receitas/despesas do mês) + o que as recorrências ativas ainda vão lançar até o fim do mês. Se nada estiver pendente, o widget não aparece (não há previsão "igual ao realizado" para mostrar).
+
 ## Preparado para o futuro (nada disso está implementado)
 
 `transactions.source`, `external_id` (único por usuário) e `metadata` permitem plugar importação CSV/Excel, leitura de PDF de fatura, lançamento por texto com IA e Open Finance sem mudar o schema: a etapa de "revisão pelo usuário" produz linhas normais em `transactions`. 2FA usa `supabase.auth.mfa` sobre a mesma sessão (ponto de extensão documentado em `js/core/auth.js`).
 
 ## Roadmap
 
-- **Fase 4:** recorrências (geração idempotente, editar uma/futuras, pausar/encerrar), orçamentos por categoria, previsão dos próximos meses e saldo projetado.
 - **Fase 5:** metas com contribuições e investimentos.
 - **Fase 6:** importação, PDF, IA, Open Finance, 2FA.

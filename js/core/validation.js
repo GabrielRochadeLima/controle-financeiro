@@ -155,6 +155,95 @@ export function validateCategory(input, siblings = [], selfId = null) {
   return { ok: Object.keys(errors).length === 0, errors, value: { name } };
 }
 
+/**
+ * Recorrência: mesmas regras de origem/categoria de validateTransaction, mais frequência
+ * e período (início obrigatório, fim opcional e posterior ao início).
+ * @param input  { type, description, amount, account_id, credit_card_id, currentAccountId,
+ *                 currentCardId, category_id, subcategory_id, frequency, start_date, end_date }
+ * @param ref    { accounts, cards, categories: Map, subcategories }
+ */
+export function validateRecurring(input, ref) {
+  const errors = {};
+  const type = input.type;
+  if (!['expense', 'income'].includes(type)) errors.type = 'Escolha o tipo.';
+
+  const description = clean(input.description);
+  if (!description) errors.description = 'Informe uma descrição.';
+  else if (description.length > 120) errors.description = 'Descrição muito longa (máx. 120 caracteres).';
+
+  const amount = Number(input.amount);
+  if (!Number.isFinite(amount) || amount <= 0) errors.amount = 'Informe um valor maior que zero.';
+  else if (amount > MAX_AMOUNT) errors.amount = 'Valor muito alto.';
+
+  const onCard = type === 'expense' && Boolean(input.credit_card_id);
+  if (onCard) {
+    const card = (ref.cards ?? []).find(
+      (c) => c.id === input.credit_card_id && (c.status === 'active' || c.id === input.currentCardId),
+    );
+    if (!card) errors.account_id = 'Escolha um cartão válido.';
+  } else {
+    const account = ref.accounts.find(
+      (a) => a.id === input.account_id && (a.status === 'active' || a.id === input.currentAccountId),
+    );
+    if (!account) errors.account_id = 'Escolha a conta.';
+  }
+
+  if (!['weekly', 'monthly', 'yearly'].includes(input.frequency)) errors.frequency = 'Escolha a frequência.';
+  if (!isValidISODate(input.start_date)) errors.start_date = 'Informe a data de início.';
+  if (input.end_date) {
+    if (!isValidISODate(input.end_date)) errors.end_date = 'Data final inválida.';
+    else if (isValidISODate(input.start_date) && input.end_date < input.start_date) {
+      errors.end_date = 'A data final deve ser igual ou depois do início.';
+    }
+  }
+
+  let categoryId = null;
+  let subcategoryId = null;
+  const category = input.category_id ? ref.categories.get(input.category_id) : null;
+  if (category && category.kind === type) {
+    categoryId = category.id;
+    if (input.subcategory_id) {
+      const sub = ref.subcategories.find((s) => s.id === input.subcategory_id && s.category_id === category.id);
+      if (sub) subcategoryId = sub.id;
+    }
+  }
+
+  const ok = Object.keys(errors).length === 0;
+  return {
+    ok,
+    errors,
+    value: ok ? {
+      type,
+      description,
+      amount: Math.round(amount * 100) / 100,
+      account_id: onCard ? null : input.account_id,
+      credit_card_id: onCard ? input.credit_card_id : null,
+      category_id: categoryId,
+      subcategory_id: subcategoryId,
+      frequency: input.frequency,
+      start_date: input.start_date,
+      end_date: input.end_date || null,
+    } : null,
+  };
+}
+
+/** Orçamento: limite mensal (> 0) e aviso entre 1% e 100%. */
+export function validateBudget(input) {
+  const errors = {};
+  const amount = Number(input.amount);
+  if (!Number.isFinite(amount) || amount <= 0) errors.amount = 'Informe um limite maior que zero.';
+  else if (amount > MAX_AMOUNT) errors.amount = 'Valor muito alto.';
+  const threshold = Number(input.alert_threshold);
+  if (!Number.isInteger(threshold) || threshold < 1 || threshold > 100) {
+    errors.alert_threshold = 'Informe um aviso entre 1% e 100%.';
+  }
+  const ok = Object.keys(errors).length === 0;
+  return {
+    ok, errors,
+    value: ok ? { amount: Math.round(amount * 100) / 100, alert_threshold: threshold } : null,
+  };
+}
+
 /** Cartão de crédito: dias entre 1 e 31; limite >= 0; conta de pagamento (opcional) deve existir. */
 export function validateCard(input, existing = [], accounts = [], selfId = null) {
   const errors = {};

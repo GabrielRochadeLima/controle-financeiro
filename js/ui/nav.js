@@ -16,6 +16,7 @@ export const PRIMARY = [
 export const SECONDARY = [
   { path: '/contas', label: 'Contas', icon: 'wallet' },
   { path: '/categorias', label: 'Categorias', icon: 'tag' },
+  { path: '/recorrencias', label: 'Recorrências', icon: 'clock' },
   { path: '/orcamentos', label: 'Orçamentos', icon: 'pie' },
   { path: '/metas', label: 'Metas', icon: 'target' },
   { path: '/investimentos', label: 'Investimentos', icon: 'trend' },

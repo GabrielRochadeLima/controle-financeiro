@@ -1,7 +1,7 @@
-// Dashboard: saldo, resumo do mês, faturas próximas, gastos por categoria e últimas
-// movimentações. Widgets de orçamento, previsão e metas entram nas fases 4–5.
+// Dashboard: saldo, resumo do mês, faturas próximas, orçamentos em alerta, previsão
+// do mês, gastos por categoria e últimas movimentações. Widgets de metas entram na fase 5.
 import { html, mount } from '../core/dom.js';
-import { formatDate, formatMoney, formatMonth, greeting } from '../core/format.js';
+import { formatDate, formatMoney, formatMonth, formatPercent, greeting } from '../core/format.js';
 import { STATUS_LABELS } from '../core/cards.js';
 import { loadDashboard } from '../services/dashboard.js';
 import { getProfile } from '../services/reference.js';
@@ -13,7 +13,10 @@ import { STATUS_BADGE } from './cards.js';
 
 /** View pura: dados -> HTML. Não toca em rede nem no DOM (fácil de testar). */
 export function dashboardView(data, name = '') {
-  const { now, summary, balance, byCategory, recent, hasAccounts, categories, accounts, cards = [], invoices = [], trend = null } = data;
+  const {
+    now, summary, balance, byCategory, recent, hasAccounts, categories, accounts, cards = [],
+    invoices = [], trend = null, budgetAlerts = [], forecast = null,
+  } = data;
   const first = name.trim().split(/\s+/)[0];
 
   const donut = categoryDonut(byCategory);
@@ -65,6 +68,43 @@ export function dashboardView(data, name = '') {
           <span class="stat-value money ${summary.left < 0 ? 'text-danger' : ''}">${formatMoney(summary.left)}</span>
         </div>
       </section>
+
+      ${forecast && (forecast.pendingIncome > 0 || forecast.pendingExpense > 0) && html`
+        <section class="card forecast-card" aria-label="Previsão do mês">
+          <div class="forecast-head">${icon('trend')}<strong>Previsão até o fim do mês</strong></div>
+          <p class="text-secondary">Somando o que já aconteceu com as recorrências que ainda faltam.</p>
+          <div class="stat-grid">
+            <div class="stat">
+              <span class="stat-label">Receitas</span>
+              <span class="stat-value money text-success">${formatMoney(forecast.income)}</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Despesas</span>
+              <span class="stat-value money text-danger">${formatMoney(forecast.expense)}</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Sobra prevista</span>
+              <span class="stat-value money ${forecast.left < 0 ? 'text-danger' : ''}">${formatMoney(forecast.left)}</span>
+            </div>
+          </div>
+        </section>`}
+
+      ${budgetAlerts.length > 0 && html`
+        <section class="section">
+          <div class="section-head"><h2>Orçamentos</h2><a href="#/orcamentos">Ver todos</a></div>
+          <div class="card card-flat"><ul class="list">
+            ${budgetAlerts.map((a) => html`
+              <li class="list-item">
+                <span class="avatar">${icon('alert')}</span>
+                <span class="list-item-main">
+                  <span class="list-item-title">${a.category.name}</span>
+                  <span class="list-item-sub ${a.ratio >= 100 ? 'text-danger' : ''}">
+                    ${formatMoney(a.spent)} de ${formatMoney(a.amount)} (${formatPercent(a.ratio)})
+                  </span>
+                </span>
+              </li>`)}
+          </ul></div>
+        </section>`}
 
       ${invoices.length > 0 && html`
         <section class="section">

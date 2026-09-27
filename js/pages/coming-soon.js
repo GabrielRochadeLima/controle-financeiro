@@ -4,7 +4,6 @@ import { html, mount } from '../core/dom.js';
 import { emptyState } from '../ui/states.js';
 
 const MODULES = {
-  orcamentos: { title: 'Orçamentos', phase: 4, icon: 'pie', text: 'Defina limites mensais por categoria e acompanhe o consumo.' },
   metas: { title: 'Metas', phase: 5, icon: 'target', text: 'Objetivos financeiros com contribuições e progresso.' },
   investimentos: { title: 'Investimentos', phase: 5, icon: 'trend', text: 'Registro dos valores investidos.' },
 };
