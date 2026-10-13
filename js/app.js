@@ -11,7 +11,6 @@ import { ensureBootstrapped } from './services/reference.js';
 import { ensureGeneratedToday } from './services/recurring.js';
 
 const page = (name) => () => import(`./pages/${name}.js`);
-const soon = (key) => () => import('./pages/coming-soon.js').then((m) => m.forRoute(key));
 
 // Cada rota carrega seu módulo sob demanda (nada é baixado antes de precisar).
 const routes = {
@@ -25,8 +24,8 @@ const routes = {
   '/cartao': page('card'),
   '/orcamentos': page('orcamentos'),
   '/recorrencias': page('recorrencias'),
-  '/metas': soon('metas'),
-  '/investimentos': soon('investimentos'),
+  '/metas': page('metas'),
+  '/investimentos': page('investimentos'),
 };
 
 async function start() {

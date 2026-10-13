@@ -44,3 +44,24 @@
 .page-header .btn, .section-head .btn { flex: none; white-space: nowrap; }
 .header-title { flex: 1; }
 .header-title > div { min-width: 0; }
+
+/* ---------- Importação de fatura (PDF) ---------- */
+.header-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; justify-content: flex-end; }
+
+.imp { display: flex; flex-direction: column; gap: var(--space-3); }
+.imp-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.imp-row {
+  display: grid; grid-template-columns: auto 1fr auto; gap: var(--space-3); align-items: start;
+  padding: var(--space-3);
+}
+.imp-row + .imp-row { border-top: 1px solid var(--border); }
+.imp-row.is-off { opacity: 0.6; }
+.imp-check { width: 22px; height: 22px; margin-top: 10px; accent-color: var(--primary); }
+.imp-main { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.imp-desc, .imp-cat { min-height: 40px; }
+.imp-meta { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); font-size: var(--fs-xs); color: var(--text-secondary); }
+.imp-amount { margin-top: 10px; white-space: nowrap; }
+.imp-summary {
+  display: flex; flex-direction: column; gap: 2px; font-size: var(--fs-sm);
+  position: sticky; bottom: 0; padding: var(--space-3) 0; background: var(--surface);
+}

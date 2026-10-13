@@ -1,5 +1,5 @@
 // Dashboard: saldo, resumo do mês, faturas próximas, orçamentos em alerta, previsão
-// do mês, gastos por categoria e últimas movimentações. Widgets de metas entram na fase 5.
+// do mês, metas, gastos por categoria e últimas movimentações.
 import { html, mount } from '../core/dom.js';
 import { formatDate, formatMoney, formatMonth, formatPercent, greeting } from '../core/format.js';
 import { STATUS_LABELS } from '../core/cards.js';
@@ -15,7 +15,7 @@ import { STATUS_BADGE } from './cards.js';
 export function dashboardView(data, name = '') {
   const {
     now, summary, balance, byCategory, recent, hasAccounts, categories, accounts, cards = [],
-    invoices = [], trend = null, budgetAlerts = [], forecast = null,
+    invoices = [], trend = null, budgetAlerts = [], forecast = null, goalsProgress = [],
   } = data;
   const first = name.trim().split(/\s+/)[0];
 
@@ -102,6 +102,26 @@ export function dashboardView(data, name = '') {
                     ${formatMoney(a.spent)} de ${formatMoney(a.amount)} (${formatPercent(a.ratio)})
                   </span>
                 </span>
+              </li>`)}
+          </ul></div>
+        </section>`}
+
+      ${goalsProgress.length > 0 && html`
+        <section class="section">
+          <div class="section-head"><h2>Metas</h2><a href="#/metas">Ver todas</a></div>
+          <div class="card card-flat"><ul class="list">
+            ${goalsProgress.map(({ goal, progress: p }) => html`
+              <li>
+                <a class="list-item" href="#/metas">
+                  <span class="avatar">${goal.icon || '🎯'}</span>
+                  <span class="list-item-main">
+                    <span class="list-item-title">${goal.name}</span>
+                    <div class="bar" role="img" aria-label="Progresso: ${formatPercent(p.percent)}">
+                      <span style="--value:${p.percent.toFixed(1)}%; --bar-color:${p.reached ? 'var(--success)' : 'var(--primary)'}"></span>
+                    </div>
+                    <span class="list-item-sub">${formatMoney(p.saved)} de ${formatMoney(p.target)} (${formatPercent(p.percent)})</span>
+                  </span>
+                </a>
               </li>`)}
           </ul></div>
         </section>`}

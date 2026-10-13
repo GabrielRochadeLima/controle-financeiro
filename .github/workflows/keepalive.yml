@@ -1,0 +1,47 @@
+# Mantém o projeto Supabase ativo: o plano gratuito PAUSA projetos sem atividade por ~7 dias.
+# Todo dia chama a função ping() do banco (supabase/migrations/006_ping.sql). Se o projeto
+# estiver pausado ou fora do ar, o job FALHA e o GitHub avisa por e-mail.
+#
+# Usa só a URL e a chave pública "anon" que já estão em js/config.js: não precisa de secret.
+name: Manter o Supabase ativo
+
+on:
+  schedule:
+    - cron: '17 12 * * *' # todo dia às 12:17 UTC (09:17 em Brasília)
+  workflow_dispatch: # também dá para rodar à mão (aba Actions)
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Chamar ping() no banco
+        run: |
+          URL=$(sed -n "s/.*SUPABASE_URL = '\([^']*\)'.*/\1/p" js/config.js)
+          KEY=$(sed -n "s/.*SUPABASE_ANON_KEY = '\([^']*\)'.*/\1/p" js/config.js)
+          SCHEMA=$(sed -n "s/.*SUPABASE_SCHEMA = '\([^']*\)'.*/\1/p" js/config.js)
+          if [ -z "$URL" ] || [ -z "$KEY" ] || [ -z "$SCHEMA" ]; then
+            echo "Não achei URL/chave/schema em js/config.js"; exit 1
+          fi
+
+          out=$(curl -sS --max-time 30 --retry 3 --retry-delay 10 --retry-all-errors \
+            -w '\n%{http_code}' -X POST "$URL/rest/v1/rpc/ping" \
+            -H "apikey: $KEY" -H "Authorization: Bearer $KEY" \
+            -H "Content-Type: application/json" -H "Content-Profile: $SCHEMA" -d '{}') || {
+              echo "Sem resposta de $URL (projeto pausado ou fora do ar?)"; exit 1; }
+
+          code=$(echo "$out" | tail -n 1)
+          body=$(echo "$out" | head -n -1)
+          echo "HTTP $code"
+          if [ "$code" != "200" ]; then
+            echo "Falhou: $body"
+            echo "Se o projeto estiver pausado, restaure em supabase.com/dashboard."
+            echo "Se a mensagem citar 'ping', rode a migration 006 no SQL Editor."
+            exit 1
+          fi
+          echo "Banco respondeu: $body"

@@ -9,7 +9,7 @@ const SUM_PAGE = 1000;   // tamanho de página do Supabase por consulta
 const SUM_MAX_PAGES = 10; // teto de segurança do total (10 mil linhas)
 
 const COLUMNS = 'id, type, amount, date, description, notes, account_id, to_account_id, ' +
-  'credit_card_id, invoice_id, category_id, subcategory_id, installment_plan_id, installment_number, ' +
+  'credit_card_id, invoice_id, category_id, subcategory_id, installment_plan_id, installment_number, investment_id, ' +
   'plan:installment_plans(installments_count)';
 
 /**

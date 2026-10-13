@@ -1,7 +1,10 @@
 // Testes das regras puras (sem dependências): node tests/rules.test.mjs
 // Cobrem fatura/vencimento/parcelas (js/core/cards.js) e validações (js/core/validation.js).
 import { addMonths, cardLimit, currentInvoice, invoiceFor, invoiceStatus, planPurchase, splitInstallments } from '../js/core/cards.js';
-import { validateBudget, validateCard, validateRecurring, validateTransaction } from '../js/core/validation.js';
+import { validateBudget, validateCard, validateContribution, validateGoal, validateInvestment, validateRecurring, validateTransaction } from '../js/core/validation.js';
+import { daysUntil, goalProgress, summarizeInvestments } from '../js/core/goals.js';
+import { itemsToLines } from '../js/core/pdf-lines.js';
+import { buildCategoryMemory, detectBank, hash32, inferYear, parseInvoice, placeInWindow, purchasesTotal, suggestCategory } from '../js/core/invoice-import.js';
 import { parseMoney } from '../js/core/format.js';
 import { NO_CATEGORY, activeChips, activeGroups, clearGroup, emptyFilters, isUuid, parseSource, resolvePeriod, validateFilters } from '../js/core/filters.js';
 import { barLayout, chartRange, closedMonthsAverage, compactMoney, donutItems, donutSegments, monthSeries, niceScale, roundedTopPath } from '../js/core/charts.js';
@@ -217,6 +220,130 @@ eq('orçamento válido', validateBudget({ amount: 500, alert_threshold: 80 }).ok
 eq('orçamento valor zero', validateBudget({ amount: 0, alert_threshold: 80 }).ok, false);
 eq('orçamento aviso fora da faixa', validateBudget({ amount: 500, alert_threshold: 150 }).ok, false);
 eq('orçamento aviso fracionado', validateBudget({ amount: 500, alert_threshold: 80.5 }).ok, false);
+
+// ---- metas ----
+const g1 = { target_amount: 1200, target_date: null };
+const gp = (g, amounts, today = '2026-09-27') => goalProgress(g, amounts.map((amount) => ({ amount })), today);
+eq('meta: sem contribuições', [gp(g1, []).saved, gp(g1, []).percent, gp(g1, []).reached], [0, 0, false]);
+eq('meta: soma em centavos', gp(g1, [0.1, 0.2]).saved, 0.3);
+eq('meta: metade', [gp(g1, [600]).percent, gp(g1, [600]).remaining], [50, 600]);
+eq('meta: atingida', [gp(g1, [1000, 200]).reached, gp(g1, [1000, 200]).remaining], [true, 0]);
+eq('meta: percentual limitado a 100', gp(g1, [5000]).percent, 100);
+eq('meta com prazo: guardar por mês (3 meses, faltam 900)', [gp({ ...g1, target_date: '2026-12-27' }, [300]).monthsLeft, gp({ ...g1, target_date: '2026-12-27' }, [300]).perMonth], [3, 300]);
+eq('meta com prazo: arredonda o mensal para cima', gp({ target_amount: 100, target_date: '2026-12-27' }, []).perMonth, 33.34);
+eq('meta com prazo vencido', [gp({ ...g1, target_date: '2026-09-01' }, [100]).overdue, gp({ ...g1, target_date: '2026-09-01' }, [100]).perMonth], [true, null]);
+eq('meta com prazo hoje: 1 mês restante', gp({ ...g1, target_date: '2026-09-27' }, [200]).perMonth, 1000);
+eq('meta atingida não fica vencida', gp({ ...g1, target_date: '2026-01-01' }, [1200]).overdue, false);
+eq('dias até', [daysUntil('2026-09-27', '2026-09-30'), daysUntil('2026-09-27', '2026-09-20')], [3, -7]);
+eq('meta válida', validateGoal({ name: 'Viagem', target_amount: 5000, target_date: '2027-01-10' }).ok, true);
+eq('meta sem nome', validateGoal({ name: ' ', target_amount: 5000 }).ok, false);
+eq('meta valor zero', validateGoal({ name: 'x', target_amount: 0 }).ok, false);
+eq('meta prazo inexistente', validateGoal({ name: 'x', target_amount: 10, target_date: '2026-02-31' }).ok, false);
+eq('contribuição válida', validateContribution({ amount: 50, date: '2026-09-27' }).ok, true);
+eq('contribuição sem data', validateContribution({ amount: 50, date: '' }).ok, false);
+eq('contribuição negativa', validateContribution({ amount: -5, date: '2026-09-27' }).ok, false);
+
+// ---- investimentos ----
+const invs = [{ id: 'i1', name: 'Tesouro' }, { id: 'i2', name: 'Ações' }];
+const sm = summarizeInvestments(invs, [
+  { amount: 500, date: '2026-08-05', investment_id: 'i1' },
+  { amount: 250.5, date: '2026-09-05', investment_id: 'i1' },
+  { amount: 100, date: '2026-09-10', investment_id: null },
+  { amount: 80, date: '2026-09-11', investment_id: 'removido' },
+]);
+eq('investimentos: total por ativo', sm.items.map((i) => [i.total, i.count, i.last]), [[750.5, 2, '2026-09-05'], [0, 0, null]]);
+eq('investimentos: sem vínculo e total geral', [sm.unlinked, sm.total], [{ total: 180, count: 2 }, 930.5]);
+eq('investimento válido', validateInvestment({ name: 'CDB', kind: 'fixed_income' }, invs).ok, true);
+eq('investimento nome repetido', validateInvestment({ name: 'tesouro', kind: 'other' }, invs).ok, false);
+eq('investimento repetido ao editar o próprio', validateInvestment({ name: 'Tesouro', kind: 'other' }, invs, 'i1').ok, true);
+eq('investimento tipo inválido', validateInvestment({ name: 'CDB', kind: 'x' }, invs).ok, false);
+const aportRef = { ...ref, investments: [{ id: 'i1', status: 'active' }, { id: 'i2', status: 'closed' }] };
+const aport = { type: 'investment', amount: 100, date: '2026-09-27', account_id: 'a1' };
+eq('aporte vinculado', validateTransaction({ ...aport, investment_id: 'i1' }, aportRef).value.investment_id, 'i1');
+eq('aporte sem vínculo', validateTransaction(aport, aportRef).value.investment_id, null);
+eq('aporte em investimento encerrado', validateTransaction({ ...aport, investment_id: 'i2' }, aportRef).ok, false);
+eq('aporte em investimento encerrado ao editar o próprio', validateTransaction({ ...aport, investment_id: 'i2' }, aportRef, { allowInvestmentId: 'i2' }).ok, true);
+eq('investimento_id é ignorado fora de aporte', validateTransaction({ ...base, account_id: 'a1', investment_id: 'i1' }, aportRef).value.investment_id, null);
+
+// ---- importação de fatura (PDF) ----
+// Fixtures SINTÉTICAS (nomes e valores inventados) com o mesmo layout das faturas reais.
+const NU = [
+  'Olá, Fulano.', 'Esta é a sua fatura de', 'setembro, no valor de', 'R$ 400,00',
+  'Data de vencimento: 14 SET 2026', 'Período vigente: 05 AGO a 05 SET',
+  'Nu Pagamentos S.A.', 'RESUMO DA FATURA ATUAL', 'Total a pagar R$ 400,00',
+  'TRANSAÇÕES DE 05 AGO A 05 SET', 'Fulano de Tal R$ 400,00',
+  '05 AGO •••• 1111 Loja Um - Parcela 2/3 R$ 100,00',
+  '05 AGO •••• 1111 Loja Um - Parcela 2/3 R$ 100,00',
+  '07 AGO •••• 2222 Padaria Boa R$ 20,50',
+  '10 AGO Streaming - NuPay - Parcela 10/24 R$ 79,50',
+  '29 AGO •••• 1111 Mercado Central R$ 100,00',
+  '31 AGO •••• 1111 Estorno Loja X −R$ 10,00',
+  'Pagamentos e Financiamentos -R$ 300,00',
+  '12 AGO Pagamento em 12 AGO −R$ 300,00',
+  '12 AGO Saldo restante da fatura anterior R$ 0,00',
+];
+const nuInv = parseInvoice(NU, { today: '2026-10-01' });
+eq('banco: nubank', detectBank(NU), 'nubank');
+eq('nubank: datas da fatura', [nuInv.due_date, nuInv.closing_date, nuInv.period_start, nuInv.total], ['2026-09-14', '2026-09-05', '2026-08-06', 400]);
+eq('nubank: linhas por tipo', [nuInv.lines.filter((l) => l.kind === 'purchase').length, nuInv.lines.filter((l) => l.kind === 'payment').length, nuInv.lines.filter((l) => l.kind === 'credit').length], [5, 2, 1]);
+eq('nubank: soma das compras confere com o total', purchasesTotal(nuInv.lines), 400);
+eq('nubank: parcela vira (n/m) e máscara do cartão', [nuInv.lines[0].description, nuInv.lines[0].installment, nuInv.lines[0].card_mask], ['Loja Um (2/3)', { number: 2, count: 3 }, '1111']);
+eq('nubank: linha sem máscara e com "- NuPay"', [nuInv.lines[3].description, nuInv.lines[3].card_mask], ['Streaming - NuPay (10/24)', null]);
+eq('nubank: dia do fechamento anterior entra no fim do ciclo', [nuInv.lines[0].printed_date, nuInv.lines[0].date], ['2026-08-05', '2026-09-05']);
+eq('nubank: data dentro do ciclo é mantida', nuInv.lines[2].date, '2026-08-07');
+eq('nubank: linhas idênticas têm ids diferentes', nuInv.lines[0].external_id !== nuInv.lines[1].external_id, true);
+eq('nubank: ids estáveis entre leituras', parseInvoice(NU, { today: '2027-01-01' }).lines.map((l) => l.external_id), nuInv.lines.map((l) => l.external_id));
+eq('nubank: avisos vazios', nuInv.warnings, []);
+
+const MPL = [
+  'Fulano de Tal', 'Vencimento: 10/09/2026', 'Total a pagar Vence em Limite total Saque total',
+  'Resumo da fatura', 'Consumos de 06/08 a 05/09 R$ 300,00', 'Total R$ 300,00', 'Pague sua fatura pelo app Mercado Pago',
+  'Detalhes de consumo', 'Movimentações na fatura', '07/08 Pagamento da fatura de agosto/2026 R$ 50,00',
+  'Cartão Visa [************1470]', 'Data Movimentações Valor em R$',
+  '15/05 LOJA*UM Parcela 16 de 18 R$ 44,94', 'Total R$ 44,94',
+  'Cartão Visa [************5602]',
+  '07/08 ZP *F 54855 Parcela 1 de 6 R$ 250,00', '28/08 MP*OUTRA R$ 5,06', 'Total R$ 255,06',
+  'Fechamento da fatura 05/09/2026',
+];
+const mpInv = parseInvoice(MPL, { today: '2026-10-01' });
+eq('banco: mercado pago', detectBank(MPL), 'mercadopago');
+eq('mpInv: datas da fatura', [mpInv.due_date, mpInv.closing_date, mpInv.period_start, mpInv.total], ['2026-09-10', '2026-09-05', '2026-08-06', 300]);
+eq('mpInv: compras e pagamento', [mpInv.lines.filter((l) => l.kind === 'purchase').length, mpInv.lines.filter((l) => l.kind === 'payment').length], [3, 1]);
+eq('mpInv: soma confere', purchasesTotal(mpInv.lines), 300);
+eq('mpInv: parcela antiga vai para o mesmo dia dentro do ciclo', [mpInv.lines[1].printed_date, mpInv.lines[1].date, mpInv.lines[1].description], ['2026-05-15', '2026-08-15', 'LOJA*UM (16/18)']);
+eq('mpInv: cartão da seção', [mpInv.lines[1].card_mask, mpInv.lines[2].card_mask], ['1470', '5602']);
+
+eq('genInvérico: sem banco conhecido', detectBank(['Fatura qualquer']), 'generic');
+const genInv = parseInvoice(['Vencimento: 10/03/2027', '02/02 MERCADO X R$ 12,30', '15/02/2027 FARMACIA Y 45,00', '05 FEV CAFE Z R$ 7,70'], { today: '2027-03-01' });
+eq('genInvérico: lê os 3 formatos de data', genInv.lines.map((l) => [l.printed_date, l.description, l.amount]), [['2027-02-02', 'MERCADO X', 12.3], ['2027-02-15', 'FARMACIA Y', 45], ['2027-02-05', 'CAFE Z', 7.7]]);
+eq('sem datas da fatura avisa', parseInvoice(['02/02 X R$ 1,00'], { today: '2027-03-01' }).warnings.length >= 2, true);
+
+eq('ano: mês depois do fechamento é do ano anterior', [inferYear(12, '2027-01-05'), inferYear(1, '2027-01-05')], [2026, 2027]);
+eq('ciclo: data dentro é mantida', placeInWindow('2026-08-20', '2026-08-06', '2026-09-05'), '2026-08-20');
+eq('ciclo: dia 15 de uma compra antiga', placeInWindow('2025-05-15', '2026-08-06', '2026-09-05'), '2026-08-15');
+eq('ciclo: dia 3 cai no mês seguinte do ciclo', placeInWindow('2025-05-03', '2026-08-06', '2026-09-05'), '2026-09-03');
+eq('ciclo: dia 31 inexistente vira o fim do ciclo', placeInWindow('2025-05-31', '2027-02-06', '2027-03-05'), '2027-03-05');
+eq('hash estável', [hash32('abc') === hash32('abc'), hash32('abc') === hash32('abd')], [true, false]);
+
+const catMem = buildCategoryMemory([
+  { description: 'Padaria Boa', category_id: 'c-pad', subcategory_id: null },
+  { description: 'PADARIA  boa', category_id: 'c-pad', subcategory_id: 's1' },
+  { description: 'Padaria Boa', category_id: 'c-outra', subcategory_id: null },
+  { description: 'Streaming', category_id: 'c-ass', subcategory_id: null },
+  { description: 'Sem categoria', category_id: null },
+]);
+eq('categoria: a mais frequente vence', suggestCategory('padaria boa', catMem)?.category_id, 'c-pad');
+eq('categoria: ignora parcela', suggestCategory('Streaming (10/24)', catMem)?.category_id, 'c-ass');
+eq('categoria: prefixo conhecido', suggestCategory('Padaria Boa Centro', catMem)?.category_id, 'c-pad');
+eq('categoria: desconhecida', suggestCategory('Loja Nova', catMem), null);
+
+eq('pdf: junta itens da mesma linha e ordena por x', itemsToLines([
+  { str: 'R$ 10,00', transform: [1, 0, 0, 1, 300, 700] },
+  { str: '05 AGO', transform: [1, 0, 0, 1, 20, 700.5] },
+  { str: 'Loja', transform: [1, 0, 0, 1, 90, 700] },
+  { str: 'Outra linha', transform: [1, 0, 0, 1, 20, 680] },
+  { str: '  ', transform: [1, 0, 0, 1, 50, 680] },
+]), ['05 AGO Loja R$ 10,00', 'Outra linha']);
 
 console.log(fails ? `\n${fails} FALHA(S)` : 'todos os testes passaram');
 process.exitCode = fails ? 1 : 0;

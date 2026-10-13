@@ -5,6 +5,7 @@ import { STATUS_LABELS, cardLimit, currentInvoice, invoiceStatus } from '../core
 import { getAccounts } from '../services/reference.js';
 import { getCards, loadUnpaidInvoices } from '../services/cards.js';
 import { openCardForm } from '../ui/card-form.js';
+import { openInvoiceImport } from '../ui/invoice-import.js';
 import { emptyState, errorState, loadingState } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
 
@@ -64,7 +65,10 @@ function cardsView(cards, unpaid, today) {
     <div class="page">
       <header class="page-header">
         <h1>Cartões</h1>
-        <button type="button" class="btn btn-primary btn-sm" id="new-card">${icon('plus')}<span>Novo cartão</span></button>
+        <div class="header-actions">
+          <button type="button" class="btn btn-ghost btn-sm" id="import-invoice">${icon('receipt')}<span>Importar fatura</span></button>
+          <button type="button" class="btn btn-primary btn-sm" id="new-card">${icon('plus')}<span>Novo cartão</span></button>
+        </div>
       </header>
 
       ${active.length
@@ -91,6 +95,7 @@ export async function mountPage(outlet) {
     const page = outlet.firstElementChild;
     const create = () => openCardForm(null, { cards, accounts });
     $('#new-card', page).addEventListener('click', create);
+    $('#import-invoice', page).addEventListener('click', () => openInvoiceImport());
     $('#empty-new-card', page)?.addEventListener('click', create);
   } catch (err) {
     console.error('[cartoes]', err);

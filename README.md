@@ -2,7 +2,7 @@
 
 Sistema web pessoal, **mobile-first**, para controlar despesas, receitas, contas, cartões, parcelamentos, recorrências, orçamentos, metas e investimentos. A métrica de qualidade do projeto: **registrar uma despesa em poucos segundos pelo celular**.
 
-> **Status: Fase 4 concluída** (recorrências, orçamentos e previsão, sobre as fases 1–3). Veja o [roadmap](#roadmap).
+> **Status: Fase 5 concluída; Fase 6 em andamento** (importação de fatura em PDF pronta; veja o [roadmap](#roadmap)). Veja o [roadmap](#roadmap).
 
 ## Funcionalidades
 
@@ -13,8 +13,9 @@ Sistema web pessoal, **mobile-first**, para controlar despesas, receitas, contas
 | 3 | Cartões, faturas, parcelamentos | ✅ |
 | 3.1 | Gráficos no dashboard (categoria e tendência mensal), filtros avançados em Movimentações | ✅ |
 | 4 | Recorrências, orçamentos por categoria, previsão do mês | ✅ |
-| 5 | Metas, investimentos | ⏳ |
-| 6 | Importação CSV/Excel, leitura de PDF, IA, Open Finance, 2FA | 🔮 futuro |
+| 5 | Metas (com contribuições) e investimentos (aportes por ativo) | ✅ |
+| 6 | Importação de fatura em PDF (Nubank, Mercado Pago, genérico) | ✅ |
+| 6.1 | Extrato CSV/Excel/OFX, IA, Open Finance, 2FA | 🔮 futuro |
 
 O que já funciona:
 
@@ -35,33 +36,36 @@ O que já funciona:
 - **Orçamentos**: limite mensal por categoria de despesa, com o quanto já foi gasto no mês e aviso configurável (ex.: avisar a partir de 80% do limite). O dashboard mostra os orçamentos mais críticos.
 - **Previsão do mês** no dashboard: soma o que já aconteceu com as recorrências que ainda faltam até o fim do mês (baseada só nas regras ativas, sem inventar dado).
 
-Metas e investimentos (fase 5) ainda não existem: esses módulos mostram uma tela "Em breve".
+- **Metas**: objetivo com valor alvo e prazo opcional (viagem, reserva...). O valor guardado é a soma das contribuições; com prazo, o app mostra quanto guardar por mês. Concluir é automático ao atingir o alvo (ou manual, e dá para reativar). O dashboard mostra as metas em andamento.
+- **Investimentos**: cadastro dos ativos (renda fixa, ações, fundos, cripto, outro) e o total aportado em cada um. O aporte é uma movimentação do tipo investimento: no lançamento rápido dá para escolher o investimento (opcional), ou tocar em **Aportar** na tela do ativo. Aportes antigos sem vínculo aparecem à parte e podem ser editados em Movimentações. O app registra o que foi aportado, não cotações nem rentabilidade.
 
 ## Tecnologias
 
 - HTML5, CSS3 (variáveis CSS), JavaScript puro (módulos ES) — **sem framework e sem build**.
 - Supabase: PostgreSQL, Auth e Row Level Security.
-- Única dependência de runtime: `@supabase/supabase-js` v2.116.0 (MIT), empacotada em `js/vendor/supabase.js` e servida pelo próprio site (sem CDN de terceiros). Como regenerar: veja [Atualizar o supabase-js](#atualizar-o-supabase-js).
+- Dependências de runtime, ambas empacotadas e servidas pelo próprio site (sem CDN de terceiros):
+  - `@supabase/supabase-js` v2.116.0 (MIT), em `js/vendor/supabase.js`. Como regenerar: veja [Atualizar o supabase-js](#atualizar-o-supabase-js).
+  - `pdfjs-dist` v4.10.38, build *legacy* (Mozilla pdf.js, Apache-2.0), em `js/vendor/pdfjs/` (com a LICENSE). Só é baixado quando você usa **Importar fatura**.
 
 ## Estrutura do projeto
 
 ```
 ├── index.html              app shell (área autenticada, rotas por hash: #/, #/contas ...)
 ├── login.html              entrar / criar conta / recuperar e redefinir senha
-├── .github/workflows/      deploy automático no GitHub Pages
+├── .github/workflows/      deploy automático no GitHub Pages (pages.yml) e keepalive diário do Supabase (keepalive.yml)
 ├── manifest.webmanifest    permite "Adicionar à tela inicial" no celular
 ├── css/                    variables (tokens de tema) · global · components · dashboard · forms · cards · charts · auth · responsive
 ├── js/
 │   ├── config.js           URL e chave pública do Supabase  ← você edita
 │   ├── app.js              guarda de sessão + rotas
 │   ├── login.js · theme-init.js (tema antes da 1ª pintura)
-│   ├── vendor/             supabase-js empacotado (não editar à mão)
-│   ├── core/               supabase, auth, router, store (cache), theme, format, dom (escape XSS), finance + cards + recurring (REGRAS), charts, filters, validation, events, memory
+│   ├── vendor/             supabase-js e pdfjs (pdf.js) empacotados (não editar à mão)
+│   ├── core/               supabase, auth, router, store (cache), theme, format, dom (escape XSS), finance + cards + recurring + goals + invoice-import (REGRAS), pdf-lines, charts, filters, validation, events, memory
 │   ├── services/           acesso a dados (reference, accounts, categories, transactions, cards, recurring, budgets, dashboard)
 │   ├── ui/                 componentes: modal + confirmação, toast, estados, nav, ícones, lançamento rápido, campo de valor, formulário de cartão, detalhe de parcelamento, gráficos, folha de filtros, formulário de recorrência, formulário de orçamento
-│   └── pages/              uma view por rota (dashboard, transactions, accounts, categories, cards, card, recorrencias, orcamentos, settings, more, coming-soon)
-├── supabase/migrations/    001_initial_schema · 002_drop_subcategory_check · 003_cards_invoices · 004_monthly_flows
-├── supabase/tests/         rls_two_users.sql · cards_behaviour.sql · monthly_flows.sql (testes para rodar no SQL Editor)
+│   └── pages/              uma view por rota (dashboard, transactions, accounts, categories, cards, card, recorrencias, orcamentos, settings, more, metas, investimentos)
+├── supabase/migrations/    001_initial_schema · 002_drop_subcategory_check · 003_cards_invoices · 004_monthly_flows · 005_import_card_lines · 006_ping
+├── supabase/tests/         rls_two_users.sql · cards_behaviour.sql · monthly_flows.sql · import_card_lines.sql (testes para rodar no SQL Editor)
 ├── tests/                  rules.test.mjs (regras de fatura/parcela/recorrência/validação: `node tests/rules.test.mjs`)
 └── assets/icons/
 ```
@@ -181,6 +185,20 @@ Centralizadas em [`js/core/finance.js`](js/core/finance.js) (saldos, resumos) e 
 - Mudar os dias de fechamento/vencimento de um cartão vale para compras novas; faturas já criadas mantêm as datas.
 - Pagamento só de fatura **inteira** (pagamento parcial não existe ainda).
 
+**Importação de fatura em PDF** (convenções; regras em `core/invoice-import.js`):
+
+- O PDF é **lido no navegador** (pdf.js); nada é enviado a servidor. As linhas de texto são reconstruídas por posição (`core/pdf-lines.js`) e interpretadas por um leitor por banco (**Nubank**, **Mercado Pago**) ou pelo **leitor genérico** (melhor esforço, vale revisar tudo).
+- **Nada é gravado antes da revisão.** Pagamentos e estornos aparecem desmarcados; a soma das compras é comparada com o total da fatura ("confere" ou a diferença).
+- As datas gravadas ficam **dentro do ciclo da fatura**: a data da compra original que o Mercado Pago imprime nas parcelas (ou o dia do fechamento anterior, no Nubank) vira o mesmo dia do mês dentro do ciclo. Assim a compra continua na mesma fatura se você editá-la depois.
+- **Parcela vira compra comum** desta fatura, com "(3/10)" na descrição; as outras parcelas estão nas faturas dos outros meses.
+- **Sem duplicar**: cada linha tem um `external_id` estável (banco + fechamento + hash + ocorrência); importar a mesma fatura de novo só traz o que faltava. A gravação é uma função do banco (`import_card_lines`), tudo ou nada, e fatura já paga continua imutável.
+- As faturas de exemplo usadas para desenvolver os leitores ficam em `amostras/`, que está no `.gitignore` (têm dados pessoais) e nunca vai para o GitHub.
+
+**Metas e investimentos** (convenções; regras em `core/goals.js`):
+
+- O **valor guardado** de uma meta nunca é uma coluna: é a soma de `goal_contributions`. O "guardar por mês" divide o que falta pelos meses restantes até o prazo (arredondado para cima; no dia do prazo conta 1 mês). Contribuição é só um registro da meta: não mexe no saldo de nenhuma conta.
+- O **investido** em cada ativo é a soma das movimentações `investment` com `investment_id` dele. Excluir o ativo não apaga aportes (o vínculo vira `null`). Investimento encerrado deixa de aparecer na escolha do aporte, mas aportes antigos continuam contando.
+
 **Recorrências, orçamentos e previsão** (convenções; regras em `core/recurring.js`):
 
 - A **geração de ocorrências** roda no cliente (não é RPC nem cron no banco): a cada login/dia, e ao abrir a tela de Recorrências, o app calcula as datas que faltam (de `generated_until` até hoje) e insere as movimentações (`source = 'recurring'`). Um índice único (`recurring_id`, `data`) evita duplicar se duas abas gerarem ao mesmo tempo.
@@ -189,11 +207,20 @@ Centralizadas em [`js/core/finance.js`](js/core/finance.js) (saldos, resumos) e 
 - **Orçamento** é só a categoria de despesa + limite + aviso (%); o "gasto no mês" nunca é uma coluna — é somado a partir de `transactions` (mesma fonte de Movimentações e do dashboard), para nunca divergir.
 - **Previsão do mês** = o que já aconteceu (receitas/despesas do mês) + o que as recorrências ativas ainda vão lançar até o fim do mês. Se nada estiver pendente, o widget não aparece (não há previsão "igual ao realizado" para mostrar).
 
+## Manter o projeto Supabase ativo
+
+No plano gratuito o Supabase **pausa o projeto** depois de ~7 dias sem atividade (o endereço da API deixa de resolver e o login mostra "Sem conexão com o servidor"). O workflow `.github/workflows/keepalive.yml` chama todo dia a função `ping()` (migration `006_ping.sql`), que só devolve a hora do servidor.
+
+- Precisa de: migration 006 aplicada no Supabase e o repositório no GitHub (branch `main`). Para testar na hora: aba **Actions > Manter o Supabase ativo > Run workflow**.
+- Se o projeto estiver pausado ou fora do ar, o job **falha** e o GitHub avisa por e-mail.
+- `ping()` é a única função liberada para o papel `anon` (visitante); as tabelas e as demais funções continuam só para `authenticated`, com RLS.
+- Limite do GitHub: em repositório **público**, workflows agendados são desativados depois de 60 dias sem nenhuma atividade no repositório. Um commit qualquer reativa.
+- Se o projeto já estiver pausado: restaure em supabase.com/dashboard e o app volta com os dados intactos.
+
 ## Preparado para o futuro (nada disso está implementado)
 
 `transactions.source`, `external_id` (único por usuário) e `metadata` permitem plugar importação CSV/Excel, leitura de PDF de fatura, lançamento por texto com IA e Open Finance sem mudar o schema: a etapa de "revisão pelo usuário" produz linhas normais em `transactions`. 2FA usa `supabase.auth.mfa` sobre a mesma sessão (ponto de extensão documentado em `js/core/auth.js`).
 
 ## Roadmap
 
-- **Fase 5:** metas com contribuições e investimentos.
-- **Fase 6:** importação, PDF, IA, Open Finance, 2FA.
+- **Fase 6 (restante):** importação de extrato da conta (CSV/OFX/Excel), outros bancos com leitor próprio, IA, Open Finance, 2FA.

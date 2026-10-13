@@ -11,6 +11,7 @@ import { friendlyError } from '../core/supabase.js';
 import { getAccounts, getCategories } from '../services/reference.js';
 import { getCards, loadCardInvoices, loadInvoicePurchases, payInvoice, unpayInvoice } from '../services/cards.js';
 import { openCardForm } from '../ui/card-form.js';
+import { openInvoiceImport } from '../ui/invoice-import.js';
 import { chip } from '../ui/chips.js';
 import { openPlanDetail } from '../ui/installment-plan.js';
 import { confirmDialog, openModal } from '../ui/modal.js';
@@ -78,7 +79,10 @@ export async function mountPage(outlet, params = {}) {
             <p>${[card.institution, `fecha dia ${card.closing_day} · vence dia ${card.due_day}`].filter(Boolean).join(' · ')}</p>
           </div>
         </div>
-        <button type="button" class="btn btn-ghost btn-sm" id="edit-card">Editar</button>
+        <div class="header-actions">
+          <button type="button" class="btn btn-ghost btn-sm" id="import-invoice">Importar fatura</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="edit-card">Editar</button>
+        </div>
       </header>
 
       <section class="card limit" aria-label="Limite">
@@ -100,6 +104,7 @@ export async function mountPage(outlet, params = {}) {
 
   const page = outlet.firstElementChild;
   $('#edit-card', page).addEventListener('click', () => openCardForm(card, { cards, accounts }));
+  $('#import-invoice', page).addEventListener('click', () => openInvoiceImport({ presetCardId: card.id }));
 
   let request = 0; // descarta respostas de faturas trocadas rapidamente
 

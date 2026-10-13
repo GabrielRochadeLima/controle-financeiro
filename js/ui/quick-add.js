@@ -17,6 +17,7 @@ import { emitDataChanged } from '../core/events.js';
 import { friendlyError } from '../core/supabase.js';
 import { getAccounts, getCategories, getSubcategories } from '../services/reference.js';
 import { createCardPurchase, getCards, updateCardPurchase } from '../services/cards.js';
+import { getInvestments } from '../services/investments.js';
 import { createTransaction, deleteTransaction, updateTransaction } from '../services/transactions.js';
 import { chip } from './chips.js';
 import { confirmDialog, openModal } from './modal.js';
@@ -47,7 +48,7 @@ const DELETE_TITLE = {
   transfer: 'Excluir esta transferência?', investment: 'Excluir este investimento?',
 };
 // Ordem em que mostramos o erro (o primeiro campo problemático).
-const ERROR_ORDER = ['type', 'amount', 'category_id', 'subcategory_id', 'account_id', 'installments', 'to_account_id', 'date', 'description'];
+const ERROR_ORDER = ['type', 'amount', 'category_id', 'subcategory_id', 'account_id', 'installments', 'to_account_id', 'investment_id', 'date', 'description'];
 const INSTALLMENT_CHOICES = [1, 2, 3, 4, 5, 6, 10, 12];
 
 const shiftDay = (iso, days) => {
@@ -60,11 +61,13 @@ const shiftDay = (iso, days) => {
  *   transaction: edita uma movimentação (conta ou compra à vista no cartão).
  *   presetCardId: abre já como compra nesse cartão (atalho da tela do cartão).
  */
-export async function openTransactionForm({ transaction = null, presetCardId = null } = {}) {
-  let accounts; let cards; let categories; let subcategories;
+export async function openTransactionForm({ transaction = null, presetCardId = null, presetInvestmentId = null } = {}) {
+  let accounts; let cards; let categories; let subcategories; let investments;
   try {
-    [accounts, cards, categories, subcategories] = await Promise.all([
+    [accounts, cards, categories, subcategories, investments] = await Promise.all([
       getAccounts(), getCards(), getCategories(), getSubcategories(),
+      // investimento é opcional no aporte: se a consulta falhar, o lançamento continua funcionando
+      getInvestments().catch((err) => { console.error('[quick-add] investimentos indisponíveis', err); return []; }),
     ]);
   } catch (err) {
     toast.error(friendlyError(err, 'Não foi possível abrir o formulário.'));
@@ -77,6 +80,7 @@ export async function openTransactionForm({ transaction = null, presetCardId = n
   // Arquivados só aparecem se a movimentação editada já usa um deles.
   const usable = accounts.filter((a) => a.status === 'active' || keep.includes(a.id));
   const usableCards = cards.filter((c) => c.status === 'active' || c.id === transaction?.credit_card_id);
+  const usableInvestments = investments.filter((i) => i.status === 'active' || i.id === transaction?.investment_id);
 
   if (!usable.length && !isCardEdit) {
     const { el, close } = openModal({
@@ -106,12 +110,13 @@ export async function openTransactionForm({ transaction = null, presetCardId = n
       type: transaction.type, category_id: transaction.category_id,
       subcategory_id: transaction.subcategory_id, account_id: transaction.account_id,
       credit_card_id: transaction.credit_card_id, to_account_id: transaction.to_account_id,
+      investment_id: transaction.investment_id ?? null,
       date: transaction.date, installments: 1,
     }
     : {
       type: TABS.some(([v]) => v === memory.type) ? memory.type : TYPES.EXPENSE,
       category_id: null, subcategory_id: null, account_id: null, credit_card_id: null,
-      to_account_id: null, date: today, installments: 1,
+      to_account_id: null, investment_id: null, date: today, installments: 1,
     };
 
   /** Fonte padrão do tipo atual: despesa lembra conta OU cartão; os demais tipos, a conta. */
@@ -125,6 +130,10 @@ export async function openTransactionForm({ transaction = null, presetCardId = n
   }
   if (!isEdit) {
     if (presetCardId && pickCard(presetCardId)) state.type = TYPES.EXPENSE;
+    if (presetInvestmentId && usableInvestments.some((i) => i.id === presetInvestmentId)) {
+      state.type = TYPES.INVESTMENT;
+      state.investment_id = presetInvestmentId;
+    }
     applyDefaultSource();
     state.to_account_id = pickAccount(memory.to_account_id, state.account_id);
   }
@@ -159,6 +168,11 @@ export async function openTransactionForm({ transaction = null, presetCardId = n
           <input class="input" type="number" id="qa-inst-custom" inputmode="numeric" min="2" max="${MAX_INSTALLMENTS}"
                  placeholder="Nº de parcelas" aria-label="Número de parcelas" hidden>
           <p class="field-hint" id="qa-inst-note"></p>
+        </section>
+
+        <section class="qa-section" id="qa-inv-wrap" hidden>
+          <h3 class="qa-label">Investimento (opcional)</h3>
+          <div class="chips" id="qa-inv"></div>
         </section>
 
         <section class="qa-section" id="qa-to-wrap" hidden>
@@ -243,6 +257,14 @@ export async function openTransactionForm({ transaction = null, presetCardId = n
     if (state.type === TYPES.TRANSFER) mount($q('#qa-to'), toChips('to', state.to_account_id, state.account_id));
   }
 
+  function renderInvestments() {
+    const show = state.type === TYPES.INVESTMENT && usableInvestments.length > 0;
+    $q('#qa-inv-wrap').hidden = !show;
+    if (!show) return;
+    mount($q('#qa-inv'), html`${usableInvestments.map((i) =>
+      chip('inv', i.id, i.name, { icon: '📈', selected: i.id === state.investment_id }))}`);
+  }
+
   function renderInstallments() {
     const show = state.type === TYPES.EXPENSE && Boolean(state.credit_card_id) && !isEdit;
     $q('#qa-inst-wrap').hidden = !show;
@@ -298,7 +320,7 @@ export async function openTransactionForm({ transaction = null, presetCardId = n
       : state.type === TYPES.INCOME ? 'Entrou em' : hasCards ? 'Conta ou cartão' : 'Conta';
     $q('#qa-save').textContent = isEdit ? 'Salvar alterações' : SAVE_LABEL[state.type];
     if (isTransfer && !state.to_account_id) state.to_account_id = pickAccount(memory.to_account_id, state.account_id);
-    renderType(); renderCategories(); renderSources(); renderInstallments();
+    renderType(); renderCategories(); renderSources(); renderInstallments(); renderInvestments();
   }
 
   // ---------- interação ----------
@@ -312,6 +334,7 @@ export async function openTransactionForm({ transaction = null, presetCardId = n
       if (value === state.type) return;
       state.type = value;
       state.category_id = null; state.subcategory_id = null; // categorias são por tipo
+      state.investment_id = null; // só o aporte aponta para um investimento
       applyDefaultSource(); // cartão só vale para despesa; os outros tipos voltam para a conta
       applyType();
     } else if (kind === 'cat') {
@@ -339,6 +362,9 @@ export async function openTransactionForm({ transaction = null, presetCardId = n
         state.installments = Number(value);
         renderInstallments();
       }
+    } else if (kind === 'inv') {
+      state.investment_id = state.investment_id === value ? null : value; // toque de novo desmarca
+      renderInvestments();
     } else if (kind === 'to') {
       state.to_account_id = value;
       renderSources();
@@ -398,8 +424,8 @@ export async function openTransactionForm({ transaction = null, presetCardId = n
         ...state, amount: money.getAmount(),
         description: $q('#qa-desc').value, notes: $q('#qa-notes').value,
       },
-      { accounts, cards, categories, subcategories },
-      { allowAccountIds: keep, allowCardId: transaction?.credit_card_id },
+      { accounts, cards, categories, subcategories, investments },
+      { allowAccountIds: keep, allowCardId: transaction?.credit_card_id, allowInvestmentId: transaction?.investment_id },
     );
     if (!result.ok) {
       const first = ERROR_ORDER.find((k) => result.errors[k]);

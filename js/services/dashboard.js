@@ -6,10 +6,12 @@ import { accountBalance, totalBalance, periodSummary, spendingByCategory } from 
 import { addDays, invoiceStatus } from '../core/cards.js';
 import { chartRange, monthSeries } from '../core/charts.js';
 import { forecastMonth } from '../core/recurring.js';
+import { goalProgress } from '../core/goals.js';
 import { getAccounts, getCategories } from './reference.js';
 import { getCards, loadUnpaidInvoices } from './cards.js';
 import { getBudgets } from './budgets.js';
 import { getRecurring } from './recurring.js';
+import { getContributions, getGoals } from './goals.js';
 import { unwrap } from './db.js';
 
 export async function loadDashboard() {
@@ -19,7 +21,7 @@ export async function loadDashboard() {
 
   const range = chartRange(today, 6);
 
-  const [accounts, categories, cards, unpaid, flows, trendRows, monthTx, recent, budgets, recurring] = await Promise.all([
+  const [accounts, categories, cards, unpaid, flows, trendRows, monthTx, recent, budgets, recurring, goals, contributions] = await Promise.all([
     getAccounts(),
     getCategories(),
     getCards(),
@@ -45,6 +47,9 @@ export async function loadDashboard() {
     // Orçamentos e recorrências (Fase 4): widgets extras, também com falha suave.
     getBudgets().catch((err) => { console.error('[dashboard] orçamentos indisponíveis', err); return []; }),
     getRecurring().catch((err) => { console.error('[dashboard] recorrências indisponíveis', err); return []; }),
+    // Metas (Fase 5): widget extra, com falha suave.
+    getGoals().catch((err) => { console.error('[dashboard] metas indisponíveis', err); return []; }),
+    getContributions().catch((err) => { console.error('[dashboard] contribuições indisponíveis', err); return []; }),
   ]);
 
   const flowsByAccount = Object.fromEntries(flows.map((f) => [f.account_id, f]));
@@ -79,6 +84,13 @@ export async function loadDashboard() {
   // Previsão simples: o que já aconteceu + o que as recorrências ativas ainda vão lançar este mês.
   const forecast = forecastMonth(recurring, today, { income: summary.income, expense: summary.expense });
 
+  // Metas em andamento, as 3 mais adiantadas primeiro.
+  const goalsProgress = goals
+    .filter((g) => g.status === 'active')
+    .map((goal) => ({ goal, progress: goalProgress(goal, contributions.filter((c) => c.goal_id === goal.id), today) }))
+    .sort((a, b) => b.progress.percent - a.progress.percent)
+    .slice(0, 3);
+
   return {
     now,
     accounts,
@@ -94,5 +106,6 @@ export async function loadDashboard() {
     recent,
     budgetAlerts,
     forecast,
+    goalsProgress,
   };
 }

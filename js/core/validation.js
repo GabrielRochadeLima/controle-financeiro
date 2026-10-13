@@ -3,6 +3,7 @@
 // As mensagens são para o usuário final (nunca técnicas).
 import { parseISODate, toISODate } from './format.js';
 import { TYPES } from './finance.js';
+import { INVESTMENT_KINDS } from './goals.js';
 
 export const MAX_AMOUNT = 999_999_999.99;
 export const MAX_INSTALLMENTS = 120; // mesmo teto da constraint de installment_plans
@@ -94,6 +95,16 @@ export function validateTransaction(input, ref, opts = {}) {
     }
   }
 
+  // Aporte pode (opcionalmente) apontar para um investimento cadastrado.
+  let investmentId = null;
+  if (type === TYPES.INVESTMENT && input.investment_id) {
+    const found = (ref.investments ?? []).find(
+      (i) => i.id === input.investment_id && (i.status === 'active' || opts.allowInvestmentId === i.id),
+    );
+    if (found) investmentId = found.id;
+    else errors.investment_id = 'Escolha um investimento válido.';
+  }
+
   const description = clean(input.description);
   if (description.length > 120) errors.description = 'Descrição muito longa (máx. 120 caracteres).';
 
@@ -115,6 +126,7 @@ export function validateTransaction(input, ref, opts = {}) {
       credit_card_id: onCard ? input.credit_card_id : null,
       category_id: categoryId,
       subcategory_id: subcategoryId,
+      investment_id: investmentId,
     } : null,
   };
 }
@@ -224,6 +236,67 @@ export function validateRecurring(input, ref) {
       start_date: input.start_date,
       end_date: input.end_date || null,
     } : null,
+  };
+}
+
+/** Meta: nome, valor alvo (> 0), prazo opcional (data válida) e ícone/observações opcionais. */
+export function validateGoal(input) {
+  const errors = {};
+  const name = clean(input.name);
+  if (!name) errors.name = 'Informe o nome da meta.';
+  else if (name.length > 80) errors.name = 'Nome muito longo (máx. 80 caracteres).';
+  const target = Number(input.target_amount);
+  if (!Number.isFinite(target) || target <= 0) errors.target_amount = 'Informe um valor alvo maior que zero.';
+  else if (target > MAX_AMOUNT) errors.target_amount = 'Valor muito alto.';
+  if (input.target_date && !isValidISODate(input.target_date)) errors.target_date = 'Prazo inválido.';
+  const icon = clean(input.icon);
+  if ([...icon].length > 8) errors.icon = 'Use só um emoji como ícone.';
+  const notes = clean(input.notes);
+  if (notes.length > 500) errors.notes = 'Observações muito longas (máx. 500 caracteres).';
+  const ok = Object.keys(errors).length === 0;
+  return {
+    ok, errors,
+    value: ok ? {
+      name, target_amount: Math.round(target * 100) / 100, target_date: input.target_date || null,
+      icon: icon || null, notes: notes || null,
+    } : null,
+  };
+}
+
+/** Contribuição para uma meta: valor > 0, data válida, nota curta opcional. */
+export function validateContribution(input) {
+  const errors = {};
+  const amount = Number(input.amount);
+  if (!Number.isFinite(amount) || amount <= 0) errors.amount = 'Informe um valor maior que zero.';
+  else if (amount > MAX_AMOUNT) errors.amount = 'Valor muito alto.';
+  if (!isValidISODate(input.date)) errors.date = 'Informe uma data válida.';
+  const note = clean(input.note);
+  if (note.length > 200) errors.note = 'Observação muito longa (máx. 200 caracteres).';
+  const ok = Object.keys(errors).length === 0;
+  return {
+    ok, errors,
+    value: ok ? { amount: Math.round(amount * 100) / 100, date: input.date, note: note || null } : null,
+  };
+}
+
+/** Investimento (ativo): nome único, tipo conhecido, instituição e observações opcionais. */
+export function validateInvestment(input, existing = [], selfId = null) {
+  const errors = {};
+  const name = clean(input.name);
+  if (!name) errors.name = 'Informe o nome do investimento.';
+  else if (name.length > 80) errors.name = 'Nome muito longo (máx. 80 caracteres).';
+  else if (existing.some((i) => i.id !== selfId && i.name.toLowerCase() === name.toLowerCase())) {
+    errors.name = 'Você já tem um investimento com esse nome.';
+  }
+  if (!(input.kind in INVESTMENT_KINDS)) errors.kind = 'Escolha o tipo do investimento.';
+  const institution = clean(input.institution);
+  if (institution.length > 60) errors.institution = 'Nome da instituição muito longo.';
+  const notes = clean(input.notes);
+  if (notes.length > 500) errors.notes = 'Observações muito longas (máx. 500 caracteres).';
+  const ok = Object.keys(errors).length === 0;
+  return {
+    ok, errors,
+    value: ok ? { name, kind: input.kind, institution: institution || null, notes: notes || null } : null,
   };
 }
 

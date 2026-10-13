@@ -19,3 +19,6 @@ _*.js
 .env
 .env.*
 *.pem
+
+# Faturas reais usadas para desenvolver os leitores de PDF (dados pessoais): nunca versionar.
+amostras/
