@@ -12,6 +12,7 @@ export const TYPES = Object.freeze({
   INCOME: 'income',
   TRANSFER: 'transfer',
   INVESTMENT: 'investment',
+  INVESTMENT_REDEMPTION: 'investment_redemption',
   INVOICE_PAYMENT: 'invoice_payment',
 });
 
@@ -20,6 +21,7 @@ export const TYPE_LABELS = Object.freeze({
   income: 'Receita',
   transfer: 'Transferência',
   investment: 'Investimento',
+  investment_redemption: 'Resgate de investimento',
   invoice_payment: 'Pagamento de fatura',
 });
 
@@ -41,8 +43,9 @@ export function accountBalance(account, flows) {
   const f = flows || {};
   return fromCents(
     cents(account.initial_balance) +
-      cents(f.income) + cents(f.transfer_in) -
-      cents(f.expense) - cents(f.transfer_out) - cents(f.investment) - cents(f.invoice_payment),
+      cents(f.income) + cents(f.transfer_in) + cents(f.investment_redemption) -
+      cents(f.expense) - cents(f.transfer_out) - cents(f.investment) -
+      cents(f.invoice_payment) - cents(f.goal_contribution),
   );
 }
 
@@ -64,15 +67,18 @@ export function periodSummary(transactions) {
   let income = 0;
   let expense = 0;
   let invested = 0;
+  let redeemed = 0;
   for (const t of transactions) {
     if (t.type === TYPES.INCOME) income += cents(t.amount);
     else if (t.type === TYPES.EXPENSE) expense += cents(t.amount);
     else if (t.type === TYPES.INVESTMENT) invested += cents(t.amount);
+    else if (t.type === TYPES.INVESTMENT_REDEMPTION) redeemed += cents(t.amount);
   }
   return {
     income: fromCents(income),
     expense: fromCents(expense),
-    invested: fromCents(invested),
+    invested: fromCents(Math.max(0, invested - redeemed)),
+    redeemed: fromCents(redeemed),
     left: fromCents(income - expense), // "quanto sobrou"
   };
 }
@@ -106,9 +112,9 @@ export function spendingByCategory(transactions, categories) {
     .sort((a, b) => b.total - a.total);
 }
 
-/** Sinal visual de uma movimentação na lista: +receita, −despesa, transferência neutra. */
+/** Sinal visual de uma movimentação na lista: +receita/+resgate, −despesa/−aporte, transferência neutra. */
 export function transactionSign(type) {
-  if (type === TYPES.INCOME) return 1;
+  if (type === TYPES.INCOME || type === TYPES.INVESTMENT_REDEMPTION) return 1;
   if (type === TYPES.TRANSFER) return 0;
   return -1;
 }

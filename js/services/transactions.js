@@ -33,7 +33,8 @@ const COLUMNS = 'id, type, amount, date, description, notes, account_id, to_acco
  */
 export function applyCriteria(query, c) {
   let q = query.gte('date', c.from).lt('date', c.to);
-  if (c.type) q = q.eq('type', c.type);
+  if (c.type === 'investment') q = q.in('type', ['investment', 'investment_redemption']);
+  else if (c.type) q = q.eq('type', c.type);
   if (isUuid(c.accountId)) q = q.or(`account_id.eq.${c.accountId},to_account_id.eq.${c.accountId}`);
   if (isUuid(c.cardId)) q = q.eq('credit_card_id', c.cardId);
   if (c.categoryId === NO_CATEGORY) {

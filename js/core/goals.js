@@ -63,26 +63,87 @@ export function goalProgress(goal, contributions, today) {
 }
 
 /**
- * Totais por investimento a partir dos aportes (transações type='investment').
- * @returns {{ items: {investment, total, count, last}[], unlinked: {total, count}, total }}
+ * Totais por investimento a partir dos aportes (type='investment') e resgates (type='investment_redemption').
+ * Também calcula o rendimento quando o ativo tem `current_amount` informado.
+ * @returns {{
+ *   items: {investment, total, invested, redeemed, currentAmount, yieldAmount, yieldPercent, count, redeemCount, last}[],
+ *   unlinked: {total, count},
+ *   total: number,
+ *   currentTotal: number,
+ *   hasCurrent: boolean,
+ *   totalYield: number,
+ *   totalYieldPercent: number|null
+ * }}
  */
-export function summarizeInvestments(investments, aportes) {
-  const byId = new Map(investments.map((i) => [i.id, { investment: i, total: 0, count: 0, last: null }]));
+export function summarizeInvestments(investments, movements) {
+  const byId = new Map(investments.map((i) => [
+    i.id,
+    { investment: i, invested: 0, redeemed: 0, count: 0, redeemCount: 0, last: null },
+  ]));
   let unlinkedTotal = 0;
   let unlinkedCount = 0;
-  let total = 0;
-  for (const a of aportes) {
-    const c = cents(a.amount);
-    total += c;
-    const entry = a.investment_id ? byId.get(a.investment_id) : null;
-    if (!entry) { unlinkedTotal += c; unlinkedCount += 1; continue; }
-    entry.total += c;
-    entry.count += 1;
-    if (!entry.last || a.date > entry.last) entry.last = a.date;
+  let netTotal = 0;
+
+  for (const m of movements) {
+    const c = cents(m.amount);
+    const isRedeem = m.type === 'investment_redemption';
+    const delta = isRedeem ? -c : c;
+    netTotal += delta;
+
+    const entry = m.investment_id ? byId.get(m.investment_id) : null;
+    if (!entry) {
+      unlinkedTotal += delta;
+      if (!isRedeem) unlinkedCount += 1;
+      continue;
+    }
+    if (isRedeem) {
+      entry.redeemed += c;
+      entry.redeemCount += 1;
+    } else {
+      entry.invested += c;
+      entry.count += 1;
+      if (!entry.last || m.date > entry.last) entry.last = m.date;
+    }
   }
+
+  let currentTotal = Math.max(0, unlinkedTotal);
+  let hasCurrent = false;
+
+  const items = [...byId.values()].map((e) => {
+    const netCents = Math.max(0, e.invested - e.redeemed);
+    const hasCur = e.investment.current_amount != null && e.investment.current_amount !== '';
+    const curCents = hasCur ? cents(e.investment.current_amount) : null;
+    if (hasCur) {
+      hasCurrent = true;
+      currentTotal += curCents;
+    } else {
+      currentTotal += netCents;
+    }
+    const yieldCents = curCents != null ? curCents - netCents : null;
+    const yieldPercent = curCents != null && netCents > 0 ? (yieldCents / netCents) * 100 : null;
+    return {
+      investment: e.investment,
+      total: netCents / 100,
+      invested: e.invested / 100,
+      redeemed: e.redeemed / 100,
+      currentAmount: curCents != null ? curCents / 100 : null,
+      yieldAmount: yieldCents != null ? yieldCents / 100 : null,
+      yieldPercent,
+      count: e.count,
+      redeemCount: e.redeemCount,
+      last: e.last,
+    };
+  });
+
+  const safeNet = Math.max(0, netTotal);
+  const totalYieldCents = hasCurrent ? currentTotal - safeNet : 0;
   return {
-    items: [...byId.values()].map((e) => ({ ...e, total: e.total / 100 })),
-    unlinked: { total: unlinkedTotal / 100, count: unlinkedCount },
-    total: total / 100,
+    items,
+    unlinked: { total: Math.max(0, unlinkedTotal) / 100, count: unlinkedCount },
+    total: safeNet / 100,
+    currentTotal: currentTotal / 100,
+    hasCurrent,
+    totalYield: totalYieldCents / 100,
+    totalYieldPercent: hasCurrent && safeNet > 0 ? (totalYieldCents / safeNet) * 100 : null,
   };
 }

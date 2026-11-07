@@ -1,6 +1,7 @@
 // Testes das regras puras (sem dependências): node tests/rules.test.mjs
 // Cobrem fatura/vencimento/parcelas (js/core/cards.js) e validações (js/core/validation.js).
 import { addMonths, cardLimit, currentInvoice, invoiceFor, invoiceStatus, planPurchase, splitInstallments } from '../js/core/cards.js';
+import { accountBalance, periodSummary, transactionSign } from '../js/core/finance.js';
 import { validateBudget, validateCard, validateContribution, validateGoal, validateInvestment, validateRecurring, validateTransaction } from '../js/core/validation.js';
 import { daysUntil, goalProgress, summarizeInvestments } from '../js/core/goals.js';
 import { itemsToLines } from '../js/core/pdf-lines.js';
@@ -242,6 +243,8 @@ eq('meta prazo inexistente', validateGoal({ name: 'x', target_amount: 10, target
 eq('contribuição válida', validateContribution({ amount: 50, date: '2026-09-27' }).ok, true);
 eq('contribuição sem data', validateContribution({ amount: 50, date: '' }).ok, false);
 eq('contribuição negativa', validateContribution({ amount: -5, date: '2026-09-27' }).ok, false);
+eq('contribuição vinculada a conta ativa', validateContribution({ amount: 50, date: '2026-09-27', account_id: 'a1' }, ref.accounts).value.account_id, 'a1');
+eq('contribuição com conta inválida falha', validateContribution({ amount: 50, date: '2026-09-27', account_id: 'inexistente' }, ref.accounts).ok, false);
 
 // ---- investimentos ----
 const invs = [{ id: 'i1', name: 'Tesouro' }, { id: 'i2', name: 'Ações' }];
@@ -253,7 +256,23 @@ const sm = summarizeInvestments(invs, [
 ]);
 eq('investimentos: total por ativo', sm.items.map((i) => [i.total, i.count, i.last]), [[750.5, 2, '2026-09-05'], [0, 0, null]]);
 eq('investimentos: sem vínculo e total geral', [sm.unlinked, sm.total], [{ total: 180, count: 2 }, 930.5]);
+
+const invsYield = [{ id: 'i1', name: 'Tesouro', current_amount: 1100 }, { id: 'i2', name: 'Ações', current_amount: null }];
+const smYield = summarizeInvestments(invsYield, [
+  { type: 'investment', amount: 1200, date: '2026-08-05', investment_id: 'i1' },
+  { type: 'investment_redemption', amount: 200, date: '2026-09-05', investment_id: 'i1' },
+  { type: 'investment', amount: 500, date: '2026-09-10', investment_id: 'i2' },
+]);
+eq('investimentos: resgate reduz aportado líquido e calcula rendimento', [
+  smYield.items[0].total, smYield.items[0].redeemed, smYield.items[0].currentAmount, smYield.items[0].yieldAmount, smYield.items[0].yieldPercent,
+], [1000, 200, 1100, 100, 10]);
+eq('investimentos: resumo geral com saldo atual e rendimento', [
+  smYield.total, smYield.currentTotal, smYield.hasCurrent, smYield.totalYield,
+], [1500, 1600, true, 100]);
+
 eq('investimento válido', validateInvestment({ name: 'CDB', kind: 'fixed_income' }, invs).ok, true);
+eq('investimento com saldo atual válido', validateInvestment({ name: 'CDB', kind: 'fixed_income', current_amount: 1500.5 }, invs).value.current_amount, 1500.5);
+eq('investimento com saldo atual negativo falha', validateInvestment({ name: 'CDB', kind: 'fixed_income', current_amount: -10 }, invs).ok, false);
 eq('investimento nome repetido', validateInvestment({ name: 'tesouro', kind: 'other' }, invs).ok, false);
 eq('investimento repetido ao editar o próprio', validateInvestment({ name: 'Tesouro', kind: 'other' }, invs, 'i1').ok, true);
 eq('investimento tipo inválido', validateInvestment({ name: 'CDB', kind: 'x' }, invs).ok, false);
@@ -263,7 +282,19 @@ eq('aporte vinculado', validateTransaction({ ...aport, investment_id: 'i1' }, ap
 eq('aporte sem vínculo', validateTransaction(aport, aportRef).value.investment_id, null);
 eq('aporte em investimento encerrado', validateTransaction({ ...aport, investment_id: 'i2' }, aportRef).ok, false);
 eq('aporte em investimento encerrado ao editar o próprio', validateTransaction({ ...aport, investment_id: 'i2' }, aportRef, { allowInvestmentId: 'i2' }).ok, true);
-eq('investimento_id é ignorado fora de aporte', validateTransaction({ ...base, account_id: 'a1', investment_id: 'i1' }, aportRef).value.investment_id, null);
+eq('resgate exige investimento quando há ativos', validateTransaction({ ...aport, type: 'investment_redemption' }, aportRef).ok, false);
+eq('resgate válido com investimento ativo', validateTransaction({ ...aport, type: 'investment_redemption', investment_id: 'i1' }, aportRef).ok, true);
+eq('investimento_id é ignorado fora de aporte/resgate', validateTransaction({ ...base, account_id: 'a1', investment_id: 'i1' }, aportRef).value.investment_id, null);
+
+eq('saldo da conta considera resgate e contribuição de meta', accountBalance(
+  { initial_balance: 1000 },
+  { income: 500, expense: 200, transfer_in: 0, transfer_out: 0, investment: 300, investment_redemption: 100, invoice_payment: 0, goal_contribution: 50 },
+), 1050);
+eq('sinal de resgate é positivo', transactionSign('investment_redemption'), 1);
+eq('periodSummary desconta resgates de invested', periodSummary([
+  { type: 'investment', amount: 500 },
+  { type: 'investment_redemption', amount: 150 },
+]).invested, 350);
 
 // ---- importação de fatura (PDF) ----
 // Fixtures SINTÉTICAS (nomes e valores inventados) com o mesmo layout das faturas reais.

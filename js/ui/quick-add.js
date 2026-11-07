@@ -34,18 +34,22 @@ const TABS = [
 const SAVED = {
   expense: 'Despesa adicionada', income: 'Receita adicionada',
   transfer: 'Transferência registrada', investment: 'Investimento registrado',
+  investment_redemption: 'Resgate registrado',
 };
 const SAVE_LABEL = {
   expense: 'Salvar despesa', income: 'Salvar receita',
   transfer: 'Salvar transferência', investment: 'Salvar investimento',
+  investment_redemption: 'Salvar resgate',
 };
 const EDIT_TITLE = {
   expense: 'Editar despesa', income: 'Editar receita',
   transfer: 'Editar transferência', investment: 'Editar investimento',
+  investment_redemption: 'Editar resgate',
 };
 const DELETE_TITLE = {
   expense: 'Excluir esta despesa?', income: 'Excluir esta receita?',
   transfer: 'Excluir esta transferência?', investment: 'Excluir este investimento?',
+  investment_redemption: 'Excluir este resgate?',
 };
 // Ordem em que mostramos o erro (o primeiro campo problemático).
 const ERROR_ORDER = ['type', 'amount', 'category_id', 'subcategory_id', 'account_id', 'installments', 'to_account_id', 'investment_id', 'date', 'description'];
@@ -61,7 +65,9 @@ const shiftDay = (iso, days) => {
  *   transaction: edita uma movimentação (conta ou compra à vista no cartão).
  *   presetCardId: abre já como compra nesse cartão (atalho da tela do cartão).
  */
-export async function openTransactionForm({ transaction = null, presetCardId = null, presetInvestmentId = null } = {}) {
+export async function openTransactionForm({
+  transaction = null, presetCardId = null, presetInvestmentId = null, presetRedeemInvestmentId = null,
+} = {}) {
   let accounts; let cards; let categories; let subcategories; let investments;
   try {
     [accounts, cards, categories, subcategories, investments] = await Promise.all([
@@ -134,6 +140,10 @@ export async function openTransactionForm({ transaction = null, presetCardId = n
       state.type = TYPES.INVESTMENT;
       state.investment_id = presetInvestmentId;
     }
+    if (presetRedeemInvestmentId && usableInvestments.some((i) => i.id === presetRedeemInvestmentId)) {
+      state.type = TYPES.INVESTMENT_REDEMPTION;
+      state.investment_id = presetRedeemInvestmentId;
+    }
     applyDefaultSource();
     state.to_account_id = pickAccount(memory.to_account_id, state.account_id);
   }
@@ -171,7 +181,8 @@ export async function openTransactionForm({ transaction = null, presetCardId = n
         </section>
 
         <section class="qa-section" id="qa-inv-wrap" hidden>
-          <h3 class="qa-label">Investimento (opcional)</h3>
+          <h3 class="qa-label" id="qa-inv-label">Investimento (opcional)</h3>
+          <div class="chips" id="qa-inv-mode" style="margin-bottom:var(--space-2)"></div>
           <div class="chips" id="qa-inv"></div>
         </section>
 
@@ -219,9 +230,10 @@ export async function openTransactionForm({ transaction = null, presetCardId = n
 
   // ---------- renderização por seção (o campo de valor nunca é recriado: mantém foco) ----------
   function renderType() {
+    const activeTab = state.type === TYPES.INVESTMENT_REDEMPTION ? TYPES.INVESTMENT : state.type;
     mount($q('#qa-type'), html`${TABS.map(([value, label]) => html`
       <button type="button" data-chip="type" data-value="${value}"
-              aria-pressed="${String(state.type === value)}">${label}</button>`)}`);
+              aria-pressed="${String(activeTab === value)}">${label}</button>`)}`);
   }
 
   function renderCategories() {
@@ -258,9 +270,18 @@ export async function openTransactionForm({ transaction = null, presetCardId = n
   }
 
   function renderInvestments() {
-    const show = state.type === TYPES.INVESTMENT && usableInvestments.length > 0;
+    const isInv = state.type === TYPES.INVESTMENT || state.type === TYPES.INVESTMENT_REDEMPTION;
+    const show = isInv && usableInvestments.length > 0;
     $q('#qa-inv-wrap').hidden = !show;
     if (!show) return;
+    const isRedeem = state.type === TYPES.INVESTMENT_REDEMPTION;
+    $q('#qa-inv-label').textContent = isRedeem ? 'Resgatar de' : 'Investimento (opcional)';
+    $q('#qa-inv-mode').hidden = isEdit;
+    if (!isEdit) {
+      mount($q('#qa-inv-mode'), html`
+        ${chip('inv-mode', TYPES.INVESTMENT, 'Aportar', { selected: !isRedeem })}
+        ${chip('inv-mode', TYPES.INVESTMENT_REDEMPTION, 'Resgatar', { selected: isRedeem })}`);
+    }
     mount($q('#qa-inv'), html`${usableInvestments.map((i) =>
       chip('inv', i.id, i.name, { icon: '📈', selected: i.id === state.investment_id }))}`);
   }
@@ -312,12 +333,13 @@ export async function openTransactionForm({ transaction = null, presetCardId = n
   function applyType() {
     const isTransfer = state.type === TYPES.TRANSFER;
     const hasCategory = state.type === TYPES.EXPENSE || state.type === TYPES.INCOME;
-    $q('.qa-amount').dataset.type = state.type;
+    const isRedeem = state.type === TYPES.INVESTMENT_REDEMPTION;
+    $q('.qa-amount').dataset.type = isRedeem ? TYPES.INCOME : state.type;
     $q('#qa-cat-wrap').hidden = !hasCategory;
     $q('#qa-to-wrap').hidden = !isTransfer;
     const hasCards = state.type === TYPES.EXPENSE && usableCards.length > 0;
     $q('#qa-acc-label').textContent = isTransfer ? 'De'
-      : state.type === TYPES.INCOME ? 'Entrou em' : hasCards ? 'Conta ou cartão' : 'Conta';
+      : (state.type === TYPES.INCOME || isRedeem) ? 'Entrou em' : hasCards ? 'Conta ou cartão' : 'Conta';
     $q('#qa-save').textContent = isEdit ? 'Salvar alterações' : SAVE_LABEL[state.type];
     if (isTransfer && !state.to_account_id) state.to_account_id = pickAccount(memory.to_account_id, state.account_id);
     renderType(); renderCategories(); renderSources(); renderInstallments(); renderInvestments();
@@ -362,6 +384,10 @@ export async function openTransactionForm({ transaction = null, presetCardId = n
         state.installments = Number(value);
         renderInstallments();
       }
+    } else if (kind === 'inv-mode') {
+      if (value === state.type) return;
+      state.type = value;
+      applyType();
     } else if (kind === 'inv') {
       state.investment_id = state.investment_id === value ? null : value; // toque de novo desmarca
       renderInvestments();
@@ -463,19 +489,3 @@ export async function openTransactionForm({ transaction = null, presetCardId = n
       toast.success('Movimentação excluída');
       close();
       emitDataChanged();
-    } catch (err) {
-      showError(friendlyError(err, 'Não foi possível excluir. Tente novamente.'));
-    }
-  });
-
-  // ---------- estado inicial ----------
-  if (isEdit) {
-    money.setAmount(transaction.amount);
-    $q('#qa-desc').value = transaction.description ?? '';
-    $q('#qa-notes').value = transaction.notes ?? '';
-  }
-  applyType();
-  renderWhen();
-  // Só abre o teclado ao criar: na edição ele cobriria os campos que o usuário quer ver.
-  if (!isEdit) $q('#qa-amount').focus();
-}

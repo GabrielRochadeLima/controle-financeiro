@@ -1,11 +1,11 @@
-// Investimentos (o ativo) e seus aportes (movimentações type='investment').
+// Investimentos (o ativo) e suas movimentações (aportes e resgates).
 import { supabase } from '../core/supabase.js';
 import { cached, invalidate } from '../core/store.js';
 import { unwrap } from './db.js';
 
 export const getInvestments = () => cached('investments', () =>
   unwrap(supabase.from('investments')
-    .select('id, name, kind, institution, status, notes')
+    .select('id, name, kind, institution, status, current_amount, notes')
     .order('name')));
 
 export async function createInvestment(value) {
@@ -24,8 +24,8 @@ export async function deleteInvestment(id) {
   invalidate('investments');
 }
 
-/** Todos os aportes até hoje (só o necessário para somar por investimento). */
+/** Todos os aportes e resgates até hoje (para somar o saldo investido líquido por ativo). */
 export const loadAportes = () => unwrap(supabase.from('transactions')
-  .select('id, amount, date, investment_id')
-  .eq('type', 'investment')
+  .select('id, type, amount, date, investment_id')
+  .in('type', ['investment', 'investment_redemption'])
   .order('date', { ascending: false }));

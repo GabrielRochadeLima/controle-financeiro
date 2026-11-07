@@ -15,6 +15,8 @@ const AUTH_MESSAGES = [
   ['password should be at least', `A senha deve ter pelo menos ${MIN_PASSWORD} caracteres.`],
   ['same password', 'A nova senha precisa ser diferente da atual.'],
   ['rate limit', 'Muitas tentativas. Aguarde um pouco e tente de novo.'],
+  ['invalid totp code', 'Código de 6 dígitos inválido ou expirado.'],
+  ['verification failed', 'Código de 6 dígitos inválido ou expirado.'],
   ['failed to fetch', 'Sem conexão com o servidor. Verifique sua internet.'],
 ];
 
@@ -38,12 +40,43 @@ export async function getSession() {
   return data.session;
 }
 
-/** Guarda de rota: sem sessão, manda para o login. Retorna a sessão ou null. */
+/**
+ * Situação da autenticação em duas etapas (2FA / TOTP) da sessão atual.
+ * @returns {Promise<{ enabled: boolean, needsMfa: boolean, factorId: string|null, factors: object[] }>}
+ */
+export async function getMfaStatus() {
+  const [{ data: aal }, { data: factorsData }] = await Promise.all([
+    supabase.auth.mfa.getAuthenticatorAssuranceLevel(),
+    supabase.auth.mfa.listFactors(),
+  ]);
+  const verified = (factorsData?.totp ?? []).filter((f) => f.status === 'verified');
+  const needsMfa = aal?.nextLevel === 'aal2' && aal?.currentLevel !== 'aal2';
+  return {
+    enabled: verified.length > 0,
+    needsMfa,
+    factorId: verified[0]?.id ?? null,
+    factors: verified,
+  };
+}
+
+/**
+ * Guarda de rota: sem sessão, ou se o usuário tem 2FA ativo mas ainda não
+ * validou o código de 6 dígitos (aal1 -> aal2), manda para o login.
+ */
 export async function requireSession() {
   const session = await getSession();
   if (!session) {
     location.replace('login.html');
     return null;
+  }
+  try {
+    const mfa = await getMfaStatus();
+    if (mfa.needsMfa) {
+      location.replace('login.html?mfa=1');
+      return null;
+    }
+  } catch (err) {
+    console.error('[auth] falha ao checar 2FA', err);
   }
   return session;
 }
@@ -52,6 +85,56 @@ export async function signIn(email, password) {
   const invalid = validateCredentials({ email, password }, { checkPassword: false });
   if (invalid) return { ok: false, message: invalid };
   const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+  if (error) return { ok: false, message: authMessage(error) };
+  try {
+    const mfa = await getMfaStatus();
+    if (mfa.needsMfa && mfa.factorId) {
+      return { ok: true, needsMfa: true, factorId: mfa.factorId };
+    }
+  } catch (err) {
+    console.error('[auth] mfa check', err);
+  }
+  return { ok: true, needsMfa: false };
+}
+
+/** Inicia o cadastro de um autenticador TOTP (remove rascunhos não verificados antes). */
+export async function enrollTotp(friendlyName = 'Financeiro') {
+  const { data: existing } = await supabase.auth.mfa.listFactors();
+  for (const f of existing?.all ?? []) {
+    if (f.status === 'unverified') {
+      await supabase.auth.mfa.unenroll({ factorId: f.id });
+    }
+  }
+  const { data, error } = await supabase.auth.mfa.enroll({
+    factorType: 'totp',
+    friendlyName,
+  });
+  if (error) return { ok: false, message: authMessage(error) };
+  return {
+    ok: true,
+    factorId: data.id,
+    qrCode: data.totp.qr_code,
+    secret: data.totp.secret,
+    uri: data.totp.uri,
+  };
+}
+
+/** Confirma o código de 6 dígitos do aplicativo autenticador (no login ou ao ativar). */
+export async function verifyTotp(factorId, code) {
+  const cleanCode = String(code ?? '').replace(/\D+/g, '');
+  if (cleanCode.length !== 6) {
+    return { ok: false, message: 'Digite os 6 números do aplicativo autenticador.' };
+  }
+  const { error } = await supabase.auth.mfa.challengeAndVerify({
+    factorId,
+    code: cleanCode,
+  });
+  return error ? { ok: false, message: authMessage(error) } : { ok: true };
+}
+
+/** Desativa o 2FA removendo o fator TOTP. */
+export async function unenrollTotp(factorId) {
+  const { error } = await supabase.auth.mfa.unenroll({ factorId });
   return error ? { ok: false, message: authMessage(error) } : { ok: true };
 }
 

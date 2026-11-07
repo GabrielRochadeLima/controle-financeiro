@@ -1,6 +1,7 @@
 // Formulário de investimento (o ativo): criar, editar, encerrar/reativar e excluir.
 // Os aportes são movimentações; excluir o investimento não apaga nenhum aporte.
 import { html, $ } from '../core/dom.js';
+import { parseMoney } from '../core/format.js';
 import { INVESTMENT_KINDS } from '../core/goals.js';
 import { validateInvestment } from '../core/validation.js';
 import { emitDataChanged } from '../core/events.js';
@@ -35,6 +36,11 @@ export function openInvestmentForm(investment, { investments }) {
           <input class="input" id="inv-inst" maxlength="60" placeholder="Ex.: Corretora XP" autocomplete="off">
         </div>
         <div class="field">
+          <label for="inv-current">Saldo atual na corretora (opcional)</label>
+          <input class="input" id="inv-current" inputmode="decimal" placeholder="0,00" autocomplete="off">
+          <span class="field-hint">Informe quanto há hoje no ativo para ver o rendimento em relação ao aportado.</span>
+        </div>
+        <div class="field">
           <label for="inv-notes">Observações (opcional)</label>
           <textarea class="textarea" id="inv-notes" rows="2" maxlength="500"></textarea>
         </div>
@@ -56,6 +62,8 @@ export function openInvestmentForm(investment, { investments }) {
     $q('#inv-name').value = investment.name;
     $q('#inv-kind').value = investment.kind;
     $q('#inv-inst').value = investment.institution ?? '';
+    $q('#inv-current').value = investment.current_amount != null
+      ? String(investment.current_amount).replace('.', ',') : '';
     $q('#inv-notes').value = investment.notes ?? '';
   } else {
     $q('#inv-name').focus();
@@ -63,10 +71,12 @@ export function openInvestmentForm(investment, { investments }) {
 
   $q('#inv-form').addEventListener('submit', async (e) => {
     e.preventDefault();
+    const curText = $q('#inv-current').value.trim();
     const result = validateInvestment({
       name: $q('#inv-name').value,
       kind: $q('#inv-kind').value,
       institution: $q('#inv-inst').value,
+      current_amount: curText === '' ? null : parseMoney(curText),
       notes: $q('#inv-notes').value,
     }, investments, investment?.id);
     if (!result.ok) { showError(Object.values(result.errors)[0]); return; }

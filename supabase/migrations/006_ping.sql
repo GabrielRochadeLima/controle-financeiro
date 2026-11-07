@@ -15,10 +15,12 @@
 create or replace function "controle-financeiro".ping()
 returns timestamptz
 language sql
-stable
-security invoker
+volatile
+security definer
 set search_path = ''
-as $$ select now() $$;
+as $$
+  select now() from (select count(*) from "controle-financeiro".profiles) _;
+$$;
 
 grant usage on schema "controle-financeiro" to anon;
 

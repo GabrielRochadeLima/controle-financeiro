@@ -9,6 +9,7 @@ import { friendlyError } from '../core/supabase.js';
 import {
   addContribution, completeGoal, deleteContribution, getContributions, getGoals, reopenGoal,
 } from '../services/goals.js';
+import { getAccounts } from '../services/reference.js';
 import { openGoalForm } from './goal-form.js';
 import { confirmDialog, openModal } from './modal.js';
 import { toast } from './toast.js';
@@ -30,17 +31,24 @@ export function openGoalDetail(goalId) {
   const box = $('#gd', el);
 
   async function paint() {
-    let goal; let mine;
+    let goal; let mine; let accounts = [];
     try {
-      const [goals, all] = await Promise.all([getGoals(), getContributions()]);
+      const [goals, all, accs] = await Promise.all([
+        getGoals(),
+        getContributions(),
+        getAccounts().catch(() => []),
+      ]);
       goal = goals.find((g) => g.id === goalId);
       mine = all.filter((c) => c.goal_id === goalId);
+      accounts = accs;
     } catch (err) {
       mount(box, html`<div class="form-error">${friendlyError(err, 'Não foi possível carregar a meta.')}</div>`);
       return;
     }
     if (!goal) { close(); return; }
 
+    const activeAccounts = accounts.filter((a) => a.status === 'active');
+    const accountName = (id) => accounts.find((a) => a.id === id)?.name ?? null;
     const p = goalProgress(goal, mine, todayISO());
     const completed = goal.status === 'completed';
     const note = deadlineNote(goal, p);
@@ -73,6 +81,14 @@ export function openGoalDetail(goalId) {
                 <input class="input" id="gd-amount" inputmode="decimal" placeholder="Valor" aria-label="Valor" autocomplete="off">
                 <input class="input" type="date" id="gd-date" aria-label="Data" value="${todayISO()}">
               </div>
+              ${activeAccounts.length > 0 && html`
+                <div class="field">
+                  <label for="gd-account">Debitar da conta (opcional)</label>
+                  <select class="select" id="gd-account">
+                    <option value="">Apenas registrar (não mexe no saldo de conta)</option>
+                    ${activeAccounts.map((a) => html`<option value="${a.id}">${a.name}</option>`)}
+                  </select>
+                </div>`}
               <input class="input" id="gd-note" maxlength="200" placeholder="Observação (opcional)" aria-label="Observação" autocomplete="off">
               <div class="form-error" id="gd-error" role="alert" hidden></div>
               <button type="submit" class="btn btn-primary" id="gd-save">Adicionar contribuição</button>
@@ -80,14 +96,18 @@ export function openGoalDetail(goalId) {
 
         <h3 class="qa-label">Contribuições (${mine.length})</h3>
         ${mine.length
-          ? html`<ul class="list">${mine.map((c) => html`
-              <li class="list-item">
-                <span class="list-item-main">
-                  <span class="list-item-title money">${formatMoney(c.amount)}</span>
-                  <span class="list-item-sub">${formatDate(c.date)}${c.note ? ` · ${c.note}` : ''}</span>
-                </span>
-                <button type="button" class="btn btn-ghost btn-sm" data-delete="${c.id}" aria-label="Excluir contribuição">Excluir</button>
-              </li>`)}</ul>`
+          ? html`<ul class="list">${mine.map((c) => {
+              const acc = c.account_id ? accountName(c.account_id) : null;
+              const sub = [formatDate(c.date), acc, c.note].filter(Boolean).join(' · ');
+              return html`
+                <li class="list-item">
+                  <span class="list-item-main">
+                    <span class="list-item-title money">${formatMoney(c.amount)}</span>
+                    <span class="list-item-sub">${sub}</span>
+                  </span>
+                  <button type="button" class="btn btn-ghost btn-sm" data-delete="${c.id}" aria-label="Excluir contribuição">Excluir</button>
+                </li>`;
+            })}</ul>`
           : html`<p class="text-secondary">Nenhuma contribuição ainda.</p>`}
       </div>`);
 
@@ -109,7 +129,8 @@ export function openGoalDetail(goalId) {
         amount: amountText === '' ? NaN : parseMoney(amountText),
         date: $('#gd-date', box).value,
         note: $('#gd-note', box).value,
-      });
+        account_id: $('#gd-account', box)?.value || null,
+      }, accounts);
       if (!result.ok) { error.textContent = Object.values(result.errors)[0]; error.hidden = false; return; }
 
       const button = $('#gd-save', box);

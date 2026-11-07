@@ -1,12 +1,15 @@
-// Tela de acesso: entrar, criar conta, recuperar e redefinir senha.
+// Tela de acesso: entrar, criar conta, recuperar/redefinir senha e 2FA (TOTP).
 import './core/theme.js';
 import { isConfigured, supabase } from './core/supabase.js';
-import { getSession, requestPasswordReset, signIn, signUp, updatePassword } from './core/auth.js';
+import {
+  getMfaStatus, getSession, requestPasswordReset, signIn, signOut, signUp, updatePassword, verifyTotp,
+} from './core/auth.js';
 import { $ } from './core/dom.js';
 
-const views = ['main', 'forgot', 'reset'];
+const views = ['main', 'forgot', 'reset', 'mfa'];
 const forms = { login: $('#form-login'), signup: $('#form-signup') };
 let inRecovery = location.hash.includes('type=recovery');
+let mfaFactorId = null;
 
 function showView(name) {
   views.forEach((v) => { $(`#view-${v}`).hidden = v !== name; });
@@ -14,6 +17,7 @@ function showView(name) {
     main: 'Entre para controlar seu dinheiro.',
     forgot: 'Sem problema, acontece.',
     reset: 'Escolha uma senha nova.',
+    mfa: 'Confirme sua identidade.',
   }[name];
 }
 
@@ -78,7 +82,22 @@ async function init() {
   });
 
   if (inRecovery) showView('reset');
-  else if (await getSession()) { goToApp(); return; }
+  else if (await getSession()) {
+    try {
+      const mfa = await getMfaStatus();
+      if (mfa.needsMfa && mfa.factorId) {
+        mfaFactorId = mfa.factorId;
+        showView('mfa');
+        $('#mfa-code')?.focus();
+      } else {
+        goToApp();
+        return;
+      }
+    } catch {
+      goToApp();
+      return;
+    }
+  }
 
   $('#tab-login').addEventListener('click', () => showTab('login'));
   $('#tab-signup').addEventListener('click', () => showTab('signup'));
@@ -88,11 +107,28 @@ async function init() {
     showView('forgot');
   });
   $('#back-login').addEventListener('click', () => { clearMessages(); showView('main'); });
+  $('#mfa-cancel')?.addEventListener('click', async () => {
+    await signOut();
+  });
 
   onSubmit(forms.login, async () => {
     const result = await signIn($('#login-email').value, $('#login-password').value);
-    if (result.ok) goToApp();
-    else showError(forms.login, result.message);
+    if (!result.ok) { showError(forms.login, result.message); return; }
+    if (result.needsMfa) {
+      mfaFactorId = result.factorId;
+      clearMessages();
+      showView('mfa');
+      $('#mfa-code').value = '';
+      $('#mfa-code').focus();
+      return;
+    }
+    goToApp();
+  });
+
+  onSubmit($('#form-mfa'), async () => {
+    const result = await verifyTotp(mfaFactorId, $('#mfa-code').value);
+    if (!result.ok) return showError($('#form-mfa'), result.message);
+    goToApp();
   });
 
   onSubmit(forms.signup, async () => {

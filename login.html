@@ -96,6 +96,22 @@
           <button class="btn btn-primary btn-block" type="submit">Salvar nova senha</button>
         </form>
       </section>
+
+      <!-- Código de 2FA (aplicativo autenticador) -->
+      <section id="view-mfa" hidden>
+        <form class="form" id="form-mfa" novalidate>
+          <h2>Verificação em duas etapas</h2>
+          <p class="text-secondary">Digite o código de 6 dígitos gerado pelo seu aplicativo autenticador.</p>
+          <div class="field">
+            <label for="mfa-code">Código de 6 dígitos</label>
+            <input class="input" id="mfa-code" inputmode="numeric" autocomplete="one-time-code"
+                   maxlength="6" placeholder="000000" required>
+          </div>
+          <div class="form-error" data-error hidden></div>
+          <button class="btn btn-primary btn-block" type="submit">Verificar e entrar</button>
+          <button class="btn btn-link" type="button" id="mfa-cancel">Entrar com outra conta</button>
+        </form>
+      </section>
     </div>
   </main>
 

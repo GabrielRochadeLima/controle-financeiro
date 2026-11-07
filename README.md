@@ -36,8 +36,9 @@ O que já funciona:
 - **Orçamentos**: limite mensal por categoria de despesa, com o quanto já foi gasto no mês e aviso configurável (ex.: avisar a partir de 80% do limite). O dashboard mostra os orçamentos mais críticos.
 - **Previsão do mês** no dashboard: soma o que já aconteceu com as recorrências que ainda faltam até o fim do mês (baseada só nas regras ativas, sem inventar dado).
 
-- **Metas**: objetivo com valor alvo e prazo opcional (viagem, reserva...). O valor guardado é a soma das contribuições; com prazo, o app mostra quanto guardar por mês. Concluir é automático ao atingir o alvo (ou manual, e dá para reativar). O dashboard mostra as metas em andamento.
-- **Investimentos**: cadastro dos ativos (renda fixa, ações, fundos, cripto, outro) e o total aportado em cada um. O aporte é uma movimentação do tipo investimento: no lançamento rápido dá para escolher o investimento (opcional), ou tocar em **Aportar** na tela do ativo. Aportes antigos sem vínculo aparecem à parte e podem ser editados em Movimentações. O app registra o que foi aportado, não cotações nem rentabilidade.
+- **Metas**: objetivo com valor alvo e prazo opcional (viagem, reserva...). O valor guardado é a soma das contribuições; com prazo, o app mostra quanto guardar por mês. Ao adicionar uma contribuição, dá para escolher **apenas registrar** ou **debitar de uma conta** (reduzindo o saldo da conta). Concluir é automático ao atingir o alvo (ou manual, e dá para reativar). O dashboard mostra as metas em andamento.
+- **Investimentos**: cadastro dos ativos (renda fixa, ações, fundos, cripto, outro), **aportes** e **resgates** por ativo, e campo opcional de **saldo atual na corretora** para calcular automaticamente o **rendimento (R$ e %)** sobre o valor líquido aportado.
+- **Autenticação em duas etapas (2FA / TOTP)**: ativação opcional em Configurações (com QR Code e chave manual para Google Authenticator, Authy, 1Password...) e verificação do código de 6 dígitos no login.
 
 ## Tecnologias
 

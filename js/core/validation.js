@@ -95,14 +95,18 @@ export function validateTransaction(input, ref, opts = {}) {
     }
   }
 
-  // Aporte pode (opcionalmente) apontar para um investimento cadastrado.
+  // Aporte ou resgate pode apontar para um investimento cadastrado.
+  // No resgate, escolher o investimento é obrigatório se houver investimentos ativos.
   let investmentId = null;
-  if (type === TYPES.INVESTMENT && input.investment_id) {
+  const isInvType = type === TYPES.INVESTMENT || type === TYPES.INVESTMENT_REDEMPTION;
+  if (isInvType && input.investment_id) {
     const found = (ref.investments ?? []).find(
       (i) => i.id === input.investment_id && (i.status === 'active' || opts.allowInvestmentId === i.id),
     );
     if (found) investmentId = found.id;
     else errors.investment_id = 'Escolha um investimento válido.';
+  } else if (type === TYPES.INVESTMENT_REDEMPTION && (ref.investments ?? []).some((i) => i.status === 'active')) {
+    errors.investment_id = 'Escolha de qual investimento é o resgate.';
   }
 
   const description = clean(input.description);
@@ -263,8 +267,8 @@ export function validateGoal(input) {
   };
 }
 
-/** Contribuição para uma meta: valor > 0, data válida, nota curta opcional. */
-export function validateContribution(input) {
+/** Contribuição para uma meta: valor > 0, data válida, nota curta opcional e conta opcional. */
+export function validateContribution(input, accounts = []) {
   const errors = {};
   const amount = Number(input.amount);
   if (!Number.isFinite(amount) || amount <= 0) errors.amount = 'Informe um valor maior que zero.';
@@ -272,14 +276,23 @@ export function validateContribution(input) {
   if (!isValidISODate(input.date)) errors.date = 'Informe uma data válida.';
   const note = clean(input.note);
   if (note.length > 200) errors.note = 'Observação muito longa (máx. 200 caracteres).';
+  const accountId = input.account_id ? String(input.account_id).trim() : null;
+  if (accountId && accounts.length > 0 && !accounts.some((a) => a.id === accountId && a.status === 'active')) {
+    errors.account_id = 'Escolha uma conta válida.';
+  }
   const ok = Object.keys(errors).length === 0;
   return {
     ok, errors,
-    value: ok ? { amount: Math.round(amount * 100) / 100, date: input.date, note: note || null } : null,
+    value: ok ? {
+      amount: Math.round(amount * 100) / 100,
+      date: input.date,
+      note: note || null,
+      ...(accountId ? { account_id: accountId } : {}),
+    } : null,
   };
 }
 
-/** Investimento (ativo): nome único, tipo conhecido, instituição e observações opcionais. */
+/** Investimento (ativo): nome único, tipo conhecido, saldo atual opcional (>= 0), instituição e observações opcionais. */
 export function validateInvestment(input, existing = [], selfId = null) {
   const errors = {};
   const name = clean(input.name);
@@ -293,10 +306,20 @@ export function validateInvestment(input, existing = [], selfId = null) {
   if (institution.length > 60) errors.institution = 'Nome da instituição muito longo.';
   const notes = clean(input.notes);
   if (notes.length > 500) errors.notes = 'Observações muito longas (máx. 500 caracteres).';
+  let currentAmount = null;
+  if (input.current_amount != null && String(input.current_amount).trim() !== '') {
+    const cur = Number(input.current_amount);
+    if (!Number.isFinite(cur) || cur < 0) errors.current_amount = 'Informe um saldo atual válido (zero ou mais).';
+    else if (cur > MAX_AMOUNT) errors.current_amount = 'Valor muito alto.';
+    else currentAmount = Math.round(cur * 100) / 100;
+  }
   const ok = Object.keys(errors).length === 0;
   return {
     ok, errors,
-    value: ok ? { name, kind: input.kind, institution: institution || null, notes: notes || null } : null,
+    value: ok ? {
+      name, kind: input.kind, institution: institution || null, notes: notes || null,
+      current_amount: currentAmount,
+    } : null,
   };
 }
 

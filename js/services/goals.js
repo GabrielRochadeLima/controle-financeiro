@@ -12,11 +12,11 @@ export const getGoals = () => cached('goals', () =>
 /** Todas as contribuições (poucas por usuário), mais recentes primeiro. */
 export const getContributions = () => cached('contributions', () =>
   unwrap(supabase.from('goal_contributions')
-    .select('id, goal_id, amount, date, note')
+    .select('id, goal_id, account_id, amount, date, note')
     .order('date', { ascending: false })
     .order('created_at', { ascending: false })));
 
-const refresh = () => invalidate('goals', 'contributions');
+const refresh = () => invalidate('goals', 'contributions', 'accounts');
 
 export async function createGoal(value) {
   await unwrap(supabase.from('financial_goals').insert(value));
