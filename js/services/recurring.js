@@ -5,7 +5,9 @@
 import { supabase } from '../core/supabase.js';
 import { cached, invalidate } from '../core/store.js';
 import { todayISO } from '../core/format.js';
+import { invoiceFor } from '../core/cards.js';
 import { pendingDates } from '../core/recurring.js';
+import { getCards } from './cards.js';
 import { unwrap } from './db.js';
 
 const COLUMNS = 'id, type, description, amount, account_id, credit_card_id, category_id, subcategory_id, ' +
@@ -38,13 +40,25 @@ export async function deleteRecurring(id) {
  */
 export async function generatePendingOccurrences() {
   const today = todayISO();
-  const rules = await unwrap(supabase.from('recurring_transactions').select(COLUMNS).eq('status', 'active'));
+  const [rules, cards] = await Promise.all([
+    unwrap(supabase.from('recurring_transactions').select(COLUMNS).eq('status', 'active')),
+    getCards().catch(() => []),
+  ]);
+  const cardById = new Map(cards.map((c) => [c.id, c]));
   let changed = false;
   for (const rule of rules) {
     const dates = pendingDates(rule, today);
     if (!dates.length) continue;
     let last = rule.generated_until;
+    const card = rule.credit_card_id ? cardById.get(rule.credit_card_id) : null;
     for (const date of dates) {
+      let invoiceId = null;
+      if (card) {
+        invoiceId = await unwrap(supabase.rpc('ensure_invoice', {
+          p_card: card.id,
+          p_invoice: invoiceFor(card, date),
+        }));
+      }
       const { error } = await supabase.from('transactions').insert({
         type: rule.type,
         amount: rule.amount,
@@ -52,6 +66,7 @@ export async function generatePendingOccurrences() {
         description: rule.description,
         account_id: rule.account_id,
         credit_card_id: rule.credit_card_id,
+        invoice_id: invoiceId,
         category_id: rule.category_id,
         subcategory_id: rule.subcategory_id,
         recurring_id: rule.id,

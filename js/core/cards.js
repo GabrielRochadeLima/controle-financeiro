@@ -122,11 +122,25 @@ export function cardLimit(card, unpaidInvoices) {
 
 /**
  * Fatura "atual" do cartão para exibição: a que recebe compras de hoje. Se já existir
- * uma linha no banco para esse fechamento, usa-a (datas gravadas + total); senão devolve
- * uma fatura virtual zerada (ainda sem compras, logo sem linha no banco).
+ * uma linha no banco para esse mês de fechamento, usa-a (datas gravadas + total);
+ * senão devolve uma fatura virtual zerada (ainda sem compras, logo sem linha no banco).
  */
 export function currentInvoice(card, invoices, today) {
-  const window = invoiceFor(card, today);
-  const stored = invoices.find((i) => i.credit_card_id === card.id && i.closing_date === window.closing_date);
-  return stored ?? { ...window, id: null, credit_card_id: card.id, paid_at: null, total_amount: 0, purchases_count: 0 };
+  const key = invoiceKeyFor(card, today);
+  const window = invoiceWindow(card, key);
+  const matches = invoices.filter((i) => {
+    if (i.credit_card_id !== card.id) return false;
+    const k = keyOf(i);
+    return k.year === key.year && k.month0 === key.month0;
+  });
+  if (!matches.length) {
+    return { ...window, id: null, credit_card_id: card.id, paid_at: null, total_amount: 0, purchases_count: 0 };
+  }
+  const base = matches.find((i) => Number(i.total_amount) > 0 && i.closing_date === window.closing_date)
+    ?? matches.find((i) => Number(i.total_amount) > 0)
+    ?? matches.find((i) => i.closing_date === window.closing_date)
+    ?? matches[0];
+  const total_amount = matches.reduce((s, i) => s + Math.round(Number(i.total_amount || 0) * 100), 0) / 100;
+  const purchases_count = matches.reduce((s, i) => s + Number(i.purchases_count || 0), 0);
+  return { ...base, total_amount, purchases_count };
 }

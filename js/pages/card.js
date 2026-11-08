@@ -109,8 +109,16 @@ export async function mountPage(outlet, params = {}) {
   let request = 0; // descarta respostas de faturas trocadas rapidamente
 
   function renderInvoice() {
-    const invoice = invoices.find((i) => monthIndex(keyOf(i)) === monthIndex(sel.key))
-      ?? { ...invoiceWindow(card, sel.key), id: null, credit_card_id: card.id, paid_at: null, total_amount: 0, purchases_count: 0 };
+    const monthInvoices = invoices.filter((i) => monthIndex(keyOf(i)) === monthIndex(sel.key));
+    const baseInvoice = monthInvoices.find((i) => Number(i.total_amount) > 0) ?? monthInvoices[0];
+    const invoice = baseInvoice
+      ? {
+          ...baseInvoice,
+          ids: monthInvoices.map((i) => i.id),
+          total_amount: monthInvoices.reduce((s, i) => s + Math.round(Number(i.total_amount || 0) * 100), 0) / 100,
+          purchases_count: monthInvoices.reduce((s, i) => s + Number(i.purchases_count || 0), 0),
+        }
+      : { ...invoiceWindow(card, sel.key), id: null, ids: [], credit_card_id: card.id, paid_at: null, total_amount: 0, purchases_count: 0 };
     const status = invoiceStatus(invoice, today);
     const total = Number(invoice.total_amount);
     const canPay = invoice.id && !invoice.paid_at && total > 0 && ['closed', 'overdue'].includes(status);
@@ -181,7 +189,7 @@ export async function mountPage(outlet, params = {}) {
     const mine = ++request;
     mount(area, html`<div class="skeleton skeleton-block"></div>`);
     try {
-      const rows = await loadInvoicePurchases(invoice.id);
+      const rows = await loadInvoicePurchases(invoice.ids?.length ? invoice.ids : invoice.id);
       if (mine !== request) return;
       if (!rows.length) {
         mount(area, html`<div class="card">${emptyState({ iconName: 'receipt', title: 'Sem compras nesta fatura' })}</div>`);

@@ -489,3 +489,19 @@ export async function openTransactionForm({
       toast.success('Movimentação excluída');
       close();
       emitDataChanged();
+    } catch (err) {
+      showError(friendlyError(err, 'Não foi possível excluir. Tente novamente.'));
+    }
+  });
+
+  // ---------- estado inicial ----------
+  if (isEdit) {
+    money.setAmount(transaction.amount);
+    $q('#qa-desc').value = transaction.description ?? '';
+    $q('#qa-notes').value = transaction.notes ?? '';
+  }
+  applyType();
+  renderWhen();
+  // Só abre o teclado ao criar: na edição ele cobriria os campos que o usuário quer ver.
+  if (!isEdit) $q('#qa-amount').focus();
+}

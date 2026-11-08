@@ -70,6 +70,19 @@ const lim = cardLimit({ credit_limit: 5000 }, [{ total_amount: 900.1 }, { total_
 eq('limite usado/disponível', [lim.used, lim.available], [940, 4060]);
 eq('limite estourado', cardLimit({ credit_limit: 100 }, [{ total_amount: 250 }]).percent, 100);
 eq('fatura atual virtual', [currentInvoice({ id: 'k', ...nu }, [], '2026-09-18').id, currentInvoice({ id: 'k', ...nu }, [], '2026-09-18').closing_date], [null, '2026-10-03']);
+eq('fatura atual encontra mês mesmo com dia de fechamento ajustado no PDF', currentInvoice(
+  { id: 'k', ...nu },
+  [{ id: 'inv-pdf', credit_card_id: 'k', period_start: '2026-09-05', closing_date: '2026-10-05', due_date: '2026-10-12', paid_at: null, total_amount: 450.75, purchases_count: 3 }],
+  '2026-09-18',
+).total_amount, 450.75);
+eq('fatura atual soma múltiplas faturas do mesmo mês', currentInvoice(
+  { id: 'k', ...nu },
+  [
+    { id: 'inv-1', credit_card_id: 'k', period_start: '2026-09-04', closing_date: '2026-10-03', due_date: '2026-10-10', paid_at: null, total_amount: 100, purchases_count: 1 },
+    { id: 'inv-2', credit_card_id: 'k', period_start: '2026-09-05', closing_date: '2026-10-05', due_date: '2026-10-12', paid_at: null, total_amount: 250.5, purchases_count: 2 },
+  ],
+  '2026-09-18',
+).total_amount, 350.5);
 
 // ---- validação ----
 const ref = {

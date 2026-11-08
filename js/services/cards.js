@@ -2,6 +2,7 @@
 // parcelas) vêm de core/cards.js; as escritas compostas passam por funções do banco
 // (supabase/migrations/003_cards_invoices.sql) para serem atômicas.
 import { supabase } from '../core/supabase.js';
+import { invoiceFor } from '../core/cards.js';
 import { invalidate, cached } from '../core/store.js';
 import { unwrap } from './db.js';
 
@@ -30,20 +31,64 @@ export async function deleteCard(id) {
 
 // ---------- faturas ----------
 
+let orphanRepairPromise = null;
+
+/**
+ * Repara compras de cartão antigas (ex.: geradas por recorrência antes da vinculação de fatura)
+ * que tenham `credit_card_id` preenchido mas `invoice_id` nulo, para que somem em `v_invoices`.
+ */
+async function ensureOrphanCardPurchasesLinked() {
+  if (!orphanRepairPromise) {
+    orphanRepairPromise = (async () => {
+      try {
+        const orphans = await unwrap(supabase.from('transactions')
+          .select('id, credit_card_id, date')
+          .eq('type', 'expense')
+          .not('credit_card_id', 'is', null)
+          .is('invoice_id', null));
+        if (!orphans.length) return;
+        const cards = await getCards();
+        const cardById = new Map(cards.map((c) => [c.id, c]));
+        for (const row of orphans) {
+          const card = cardById.get(row.credit_card_id);
+          if (!card) continue;
+          const invoiceId = await unwrap(supabase.rpc('ensure_invoice', {
+            p_card: card.id,
+            p_invoice: invoiceFor(card, row.date),
+          }));
+          if (invoiceId) {
+            await unwrap(supabase.from('transactions').update({ invoice_id: invoiceId }).eq('id', row.id));
+          }
+        }
+      } catch (err) {
+        console.warn('[cards] falha ao vincular compras órfãs de fatura', err);
+      }
+    })();
+  }
+  return orphanRepairPromise;
+}
+
 /** Faturas não pagas de todos os cartões, com total (base do limite usado e do dashboard). */
-export const loadUnpaidInvoices = () => unwrap(supabase.from('v_invoices')
-  .select('*').is('paid_at', null).order('due_date'));
+export async function loadUnpaidInvoices() {
+  await ensureOrphanCardPurchasesLinked();
+  return unwrap(supabase.from('v_invoices').select('*').is('paid_at', null).order('due_date'));
+}
 
 /** Todas as faturas de um cartão (poucas por ano), da mais antiga para a mais nova. */
-export const loadCardInvoices = (cardId) => unwrap(supabase.from('v_invoices')
-  .select('*').eq('credit_card_id', cardId).order('closing_date'));
+export async function loadCardInvoices(cardId) {
+  await ensureOrphanCardPurchasesLinked();
+  return unwrap(supabase.from('v_invoices').select('*').eq('credit_card_id', cardId).order('closing_date'));
+}
 
-/** Compras de uma fatura (inclui o rótulo da parcela via plano). */
-export const loadInvoicePurchases = (invoiceId) => unwrap(supabase.from('transactions')
-  .select('id, type, amount, date, description, notes, credit_card_id, invoice_id, category_id, ' +
-    'subcategory_id, installment_plan_id, installment_number, plan:installment_plans(installments_count)')
-  .eq('invoice_id', invoiceId).eq('type', 'expense')
-  .order('date', { ascending: false }).order('created_at', { ascending: false }));
+/** Compras de uma fatura (ou conjunto de faturas do mesmo mês), incluindo o rótulo da parcela via plano. */
+export const loadInvoicePurchases = (invoiceIdOrIds) => {
+  const ids = (Array.isArray(invoiceIdOrIds) ? invoiceIdOrIds : [invoiceIdOrIds]).filter(Boolean);
+  return unwrap(supabase.from('transactions')
+    .select('id, type, amount, date, description, notes, credit_card_id, invoice_id, category_id, ' +
+      'subcategory_id, installment_plan_id, installment_number, plan:installment_plans(installments_count)')
+    .in('invoice_id', ids).eq('type', 'expense')
+    .order('date', { ascending: false }).order('created_at', { ascending: false }));
+};
 
 // ---------- compras (funções atômicas do banco) ----------
 
