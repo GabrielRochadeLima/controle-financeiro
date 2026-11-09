@@ -74,6 +74,12 @@ export async function loadUnpaidInvoices() {
   return unwrap(supabase.from('v_invoices').select('*').is('paid_at', null).order('due_date'));
 }
 
+/** Todas as faturas de todos os cartões (usado para competência mensal do dashboard e orçamentos). */
+export async function loadAllInvoices() {
+  await ensureOrphanCardPurchasesLinked();
+  return unwrap(supabase.from('v_invoices').select('*').order('due_date'));
+}
+
 /** Todas as faturas de um cartão (poucas por ano), da mais antiga para a mais nova. */
 export async function loadCardInvoices(cardId) {
   await ensureOrphanCardPurchasesLinked();

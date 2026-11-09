@@ -144,3 +144,44 @@ export function currentInvoice(card, invoices, today) {
   const purchases_count = matches.reduce((s, i) => s + Number(i.purchases_count || 0), 0);
   return { ...base, total_amount, purchases_count };
 }
+
+/**
+ * IDs das faturas que representam a competência do mês de `today` para cada cartão:
+ * prioriza a fatura que fecha no mês corrente (com compras), senão a fatura aberta atual
+ * (`invoiceKeyFor`), senão a fatura que vence no mês corrente.
+ */
+export function activeMonthInvoiceIds(cards, invoices, today) {
+  const [year, month] = today.split('-').map(Number);
+  const month0 = month - 1;
+  const monthStart = `${today.slice(0, 7)}-01`;
+  const monthEnd = toISODate(new Date(year, month, 0));
+  const ids = [];
+
+  for (const card of cards) {
+    const mine = invoices.filter((i) => i.credit_card_id === card.id && i.id);
+    if (!mine.length) continue;
+
+    const withAmount = (list) => list.filter((i) => Number(i.total_amount) > 0);
+    const closingThisMonth = withAmount(mine.filter((i) => {
+      const k = keyOf(i);
+      return k.year === year && k.month0 === month0;
+    }));
+    const openKey = invoiceKeyFor(card, today);
+    const openNow = withAmount(mine.filter((i) => {
+      const k = keyOf(i);
+      return k.year === openKey.year && k.month0 === openKey.month0;
+    }));
+    const dueThisMonth = withAmount(mine.filter(
+      (i) => i.due_date >= monthStart && i.due_date <= monthEnd,
+    ));
+
+    const chosen = closingThisMonth.length
+      ? closingThisMonth
+      : openNow.length
+        ? openNow
+        : dueThisMonth;
+
+    for (const inv of chosen) ids.push(inv.id);
+  }
+  return ids;
+}

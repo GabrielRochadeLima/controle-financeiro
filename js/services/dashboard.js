@@ -3,12 +3,12 @@
 import { supabase } from '../core/supabase.js';
 import { toISODate, todayISO } from '../core/format.js';
 import { accountBalance, totalBalance, periodSummary, spendingByCategory } from '../core/finance.js';
-import { addDays, invoiceStatus } from '../core/cards.js';
+import { activeMonthInvoiceIds, addDays, invoiceStatus } from '../core/cards.js';
 import { chartRange, monthSeries } from '../core/charts.js';
 import { forecastMonth } from '../core/recurring.js';
 import { goalProgress } from '../core/goals.js';
 import { getAccounts, getCategories } from './reference.js';
-import { getCards, loadUnpaidInvoices } from './cards.js';
+import { getCards, loadAllInvoices } from './cards.js';
 import { getBudgets } from './budgets.js';
 import { getRecurring } from './recurring.js';
 import { getContributions, getGoals } from './goals.js';
@@ -21,21 +21,21 @@ export async function loadDashboard() {
 
   const range = chartRange(today, 6);
 
-  const [accounts, categories, cards, unpaid, flows, trendRows, monthTx, recent, budgets, recurring, goals, contributions] = await Promise.all([
+  const [accounts, categories, cards, allInvoices, flows, trendRows, accountMonthTx, recent, budgets, recurring, goals, contributions] = await Promise.all([
     getAccounts(),
     getCategories(),
     getCards(),
     // As faturas são um widget extra: se falharem (ex.: migration de cartões ainda não aplicada),
     // o resto da tela inicial continua funcionando.
-    loadUnpaidInvoices().catch((err) => { console.error('[dashboard] faturas indisponíveis', err); return []; }),
+    loadAllInvoices().catch((err) => { console.error('[dashboard] faturas indisponíveis', err); return null; }),
     unwrap(supabase.rpc('account_flows', { p_until: today })),
     // Série mensal do gráfico (migration 004). Também é opcional: sem ela só o gráfico some.
     unwrap(supabase.rpc('monthly_flows', { p_from: range.from, p_until: today }))
       .catch((err) => { console.error('[dashboard] gráfico mensal indisponível', err); return null; }),
-    // "Do mês" = do dia 1 até hoje: lançamentos futuros (parcelas, recorrências)
-    // ainda não aconteceram e pertencem à previsão, não ao gasto realizado.
+    // Em conta: do dia 1 até hoje (lançamentos futuros em conta pertencem à previsão).
     unwrap(supabase.from('transactions')
       .select('type, amount, category_id')
+      .is('credit_card_id', null)
       .gte('date', monthStart).lte('date', today)),
     unwrap(supabase.from('transactions')
       .select('id, type, amount, date, description, category_id, account_id, to_account_id, credit_card_id, ' +
@@ -51,6 +51,26 @@ export async function loadDashboard() {
     getGoals().catch((err) => { console.error('[dashboard] metas indisponíveis', err); return []; }),
     getContributions().catch((err) => { console.error('[dashboard] contribuições indisponíveis', err); return []; }),
   ]);
+
+  // No cartão: entra pela competência da fatura do mês de cada cartão (incluindo compras feitas no
+  // fim do mês anterior que caem na fatura atual e todas as parcelas da fatura do mês).
+  let cardMonthTx = [];
+  if (allInvoices) {
+    const invoiceIds = activeMonthInvoiceIds(cards, allInvoices, today);
+    if (invoiceIds.length > 0) {
+      cardMonthTx = await unwrap(supabase.from('transactions')
+        .select('type, amount, category_id')
+        .eq('type', 'expense')
+        .in('invoice_id', invoiceIds));
+    }
+  } else {
+    cardMonthTx = await unwrap(supabase.from('transactions')
+      .select('type, amount, category_id')
+      .not('credit_card_id', 'is', null)
+      .gte('date', monthStart).lte('date', today));
+  }
+  const monthTx = [...accountMonthTx, ...cardMonthTx];
+  const unpaid = (allInvoices ?? []).filter((i) => !i.paid_at);
 
   const flowsByAccount = Object.fromEntries(flows.map((f) => [f.account_id, f]));
   const active = accounts.filter((a) => a.status === 'active');

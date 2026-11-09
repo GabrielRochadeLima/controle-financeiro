@@ -1,6 +1,6 @@
 // Testes das regras puras (sem dependências): node tests/rules.test.mjs
 // Cobrem fatura/vencimento/parcelas (js/core/cards.js) e validações (js/core/validation.js).
-import { addMonths, cardLimit, currentInvoice, invoiceFor, invoiceStatus, planPurchase, splitInstallments } from '../js/core/cards.js';
+import { activeMonthInvoiceIds, addMonths, cardLimit, currentInvoice, invoiceFor, invoiceStatus, planPurchase, splitInstallments } from '../js/core/cards.js';
 import { accountBalance, periodSummary, transactionSign } from '../js/core/finance.js';
 import { validateBudget, validateCard, validateContribution, validateGoal, validateInvestment, validateRecurring, validateTransaction } from '../js/core/validation.js';
 import { daysUntil, goalProgress, summarizeInvestments } from '../js/core/goals.js';
@@ -83,6 +83,18 @@ eq('fatura atual soma múltiplas faturas do mesmo mês', currentInvoice(
   ],
   '2026-09-18',
 ).total_amount, 350.5);
+eq('competência do mês: inclui faturas de todos os cartões', activeMonthInvoiceIds(
+  [
+    { id: 'c1', closing_day: 3, due_day: 10 },
+    { id: 'c2', closing_day: 25, due_day: 5 },
+  ],
+  [
+    { id: 'inv-c1-nov', credit_card_id: 'c1', closing_date: '2026-11-03', due_date: '2026-11-10', total_amount: 800 },
+    { id: 'inv-c1-dez', credit_card_id: 'c1', closing_date: '2026-12-03', due_date: '2026-12-10', total_amount: 100 },
+    { id: 'inv-c2-nov', credit_card_id: 'c2', closing_date: '2026-11-25', due_date: '2026-12-05', total_amount: 1200 },
+  ],
+  '2026-11-09',
+), ['inv-c1-nov', 'inv-c2-nov']);
 
 // ---- validação ----
 const ref = {
