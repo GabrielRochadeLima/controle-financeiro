@@ -154,7 +154,7 @@ export async function openTransactionForm({
     title: isEdit ? EDIT_TITLE[state.type] : 'Nova movimentação',
     body: html`
       <form class="qa" id="qa-form" novalidate>
-        <div class="segmented" id="qa-type" role="group" aria-label="Tipo" ${isEdit ? 'hidden' : ''}></div>
+        <div class="segmented" id="qa-type" role="group" aria-label="Tipo" ${isEdit && transaction?.credit_card_id ? 'hidden' : ''}></div>
 
         <div class="qa-amount">
           <span class="qa-currency">R$</span>

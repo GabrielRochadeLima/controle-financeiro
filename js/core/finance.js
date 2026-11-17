@@ -59,6 +59,18 @@ export function totalBalance(accounts, flowsByAccount) {
 }
 
 /**
+ * Calcula o novo `initial_balance` necessário para que uma conta cujo saldo atual
+ * é `currentBalance` passe a ter exatamente `targetBalance` hoje.
+ */
+export function adjustedInitialBalance(account, currentBalance, targetBalance) {
+  const diffCents = cents(targetBalance) - cents(currentBalance);
+  return {
+    initial_balance: fromCents(cents(account.initial_balance) + diffCents),
+    diff: fromCents(diffCents),
+  };
+}
+
+/**
  * Resumo de um conjunto de movimentações (normalmente as do mês).
  * Transferência e pagamento de fatura ficam de fora: não são receita nem despesa.
  * Investimento é reportado à parte (não é gasto, mas também não é "sobra").

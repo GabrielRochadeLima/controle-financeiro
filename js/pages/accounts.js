@@ -1,12 +1,14 @@
 // Contas: lista com saldo atual, criação, edição, arquivamento e exclusão.
 import { html, mount, $, $$ } from '../core/dom.js';
 import { formatMoney, parseMoney } from '../core/format.js';
+import { adjustedInitialBalance } from '../core/finance.js';
 import { ACCOUNT_TYPES, validateAccount } from '../core/validation.js';
 import { emitDataChanged } from '../core/events.js';
 import { friendlyError, isInUseError } from '../core/supabase.js';
 import {
   createAccount, deleteAccount, loadAccountsWithBalance, setAccountStatus, updateAccount,
 } from '../services/accounts.js';
+import { formatDiff, openBalanceAdjustModal } from '../ui/balance-adjust.js';
 import { confirmDialog, openModal } from '../ui/modal.js';
 import { emptyState, errorState, loadingState } from '../ui/states.js';
 import { toast } from '../ui/toast.js';
@@ -33,7 +35,10 @@ function accountsView(accounts) {
     <div class="page">
       <header class="page-header">
         <h1>Contas</h1>
-        <button type="button" class="btn btn-primary btn-sm" id="new-account">${icon('plus')}<span>Nova conta</span></button>
+        <div class="header-actions">
+          ${active.length > 0 && html`<button type="button" class="btn btn-ghost btn-sm" id="adjust-balance">Ajustar saldo</button>`}
+          <button type="button" class="btn btn-primary btn-sm" id="new-account">${icon('plus')}<span>Nova conta</span></button>
+        </div>
       </header>
 
       ${active.length ? html`
@@ -77,9 +82,11 @@ function openAccountForm(account, all) {
           </select>
         </div>
         <div class="field">
-          <label for="acc-balance">Saldo inicial</label>
+          <label for="acc-balance">${isEdit ? 'Saldo atual no banco' : 'Saldo inicial'}</label>
           <input class="input" id="acc-balance" inputmode="decimal" placeholder="0,00" autocomplete="off">
-          <span class="field-hint">Quanto havia na conta quando você começou a usar o sistema. Pode ser negativo.</span>
+          <span class="field-hint" id="acc-balance-hint">${isEdit
+            ? `Saldo no app hoje: ${formatMoney(account.balance)} · Diferença: Sem diferença`
+            : 'Quanto havia na conta quando você começou a usar o sistema. Pode ser negativo.'}</span>
         </div>
         <div class="form-error" id="acc-error" role="alert" hidden></div>
         <div class="modal-actions">
@@ -97,7 +104,17 @@ function openAccountForm(account, all) {
     $('#acc-name', el).value = account.name;
     $('#acc-inst', el).value = account.institution ?? '';
     $('#acc-type', el).value = account.type;
-    $('#acc-balance', el).value = String(account.initial_balance).replace('.', ',');
+    $('#acc-balance', el).value = account.balance.toFixed(2).replace('.', ',');
+    $('#acc-balance', el).addEventListener('input', (e) => {
+      const val = parseMoney(e.target.value.trim());
+      const hint = $('#acc-balance-hint', el);
+      if (!Number.isFinite(val)) {
+        hint.textContent = `Saldo no app hoje: ${formatMoney(account.balance)}`;
+        return;
+      }
+      const { diff } = adjustedInitialBalance(account, account.balance, val);
+      hint.textContent = `Saldo no app hoje: ${formatMoney(account.balance)} · Diferença: ${formatDiff(diff)}`;
+    });
   } else {
     $('#acc-name', el).focus();
   }
@@ -105,11 +122,15 @@ function openAccountForm(account, all) {
   $('#account-form', el).addEventListener('submit', async (e) => {
     e.preventDefault();
     const balanceText = $('#acc-balance', el).value.trim();
+    const typedBalance = balanceText === '' ? 0 : parseMoney(balanceText);
+    const initial_balance = isEdit && Number.isFinite(typedBalance)
+      ? adjustedInitialBalance(account, account.balance, typedBalance).initial_balance
+      : typedBalance;
     const result = validateAccount({
       name: $('#acc-name', el).value,
       institution: $('#acc-inst', el).value,
       type: $('#acc-type', el).value,
-      initial_balance: balanceText === '' ? 0 : parseMoney(balanceText),
+      initial_balance,
     }, all, account?.id);
     if (!result.ok) { showError(Object.values(result.errors)[0]); return; }
 
@@ -168,6 +189,7 @@ export async function mountPage(outlet) {
 
     const create = () => openAccountForm(null, accounts);
     $('#new-account', outlet).addEventListener('click', create);
+    $('#adjust-balance', outlet)?.addEventListener('click', () => openBalanceAdjustModal({ preloadedAccounts: accounts }));
     $('#empty-new-account', outlet)?.addEventListener('click', create);
     $$('[data-id]', outlet).forEach((btn) => btn.addEventListener('click', () => {
       openAccountForm(accounts.find((a) => a.id === btn.dataset.id), accounts);

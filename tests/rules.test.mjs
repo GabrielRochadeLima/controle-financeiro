@@ -1,7 +1,7 @@
 // Testes das regras puras (sem dependências): node tests/rules.test.mjs
 // Cobrem fatura/vencimento/parcelas (js/core/cards.js) e validações (js/core/validation.js).
 import { activeMonthInvoiceIds, addMonths, cardLimit, currentInvoice, invoiceFor, invoiceStatus, planPurchase, splitInstallments } from '../js/core/cards.js';
-import { accountBalance, periodSummary, transactionSign } from '../js/core/finance.js';
+import { accountBalance, adjustedInitialBalance, periodSummary, transactionSign } from '../js/core/finance.js';
 import { validateBudget, validateCard, validateContribution, validateGoal, validateInvestment, validateRecurring, validateTransaction } from '../js/core/validation.js';
 import { daysUntil, goalProgress, summarizeInvestments } from '../js/core/goals.js';
 import { itemsToLines } from '../js/core/pdf-lines.js';
@@ -320,6 +320,11 @@ eq('periodSummary desconta resgates de invested', periodSummary([
   { type: 'investment', amount: 500 },
   { type: 'investment_redemption', amount: 150 },
 ]).invested, 350);
+eq('ajuste manual de saldo recalcula initial_balance e diferença exata', adjustedInitialBalance(
+  { initial_balance: 500 },
+  1250.4,
+  2000,
+), { initial_balance: 1249.6, diff: 749.6 });
 
 // ---- importação de fatura (PDF) ----
 // Fixtures SINTÉTICAS (nomes e valores inventados) com o mesmo layout das faturas reais.

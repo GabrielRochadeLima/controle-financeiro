@@ -8,6 +8,7 @@ import { getProfile } from '../services/reference.js';
 import { emptyState, errorState, loadingState } from '../ui/states.js';
 import { icon } from '../ui/icons.js';
 import { bindDonut, bindMonthly, categoryDonut, monthlyChart } from '../ui/charts.js';
+import { openBalanceAdjustModal } from '../ui/balance-adjust.js';
 import { transactionItem } from '../ui/transaction-item.js';
 import { STATUS_BADGE } from './cards.js';
 
@@ -49,9 +50,12 @@ export function dashboardView(data, name = '') {
           <div class="balance-label">Saldo total</div>
           <div class="balance-value money">${formatMoney(balance)}</div>
         </div>
-        <button type="button" class="btn" data-action="new-transaction">
-          ${icon('plus')}<span>Nova movimentação</span>
-        </button>
+        <div style="display:flex;gap:var(--space-2);flex-wrap:wrap">
+          ${hasAccounts && html`<button type="button" class="btn btn-ghost" id="dash-adjust-balance">Ajustar saldo</button>`}
+          <button type="button" class="btn" data-action="new-transaction">
+            ${icon('plus')}<span>Nova movimentação</span>
+          </button>
+        </div>
       </section>
 
       <section class="summary" aria-label="Resumo do mês">
@@ -183,6 +187,7 @@ export async function mountPage(outlet) {
   try {
     const [data, profile] = await Promise.all([loadDashboard(), getProfile()]);
     mount(outlet, dashboardView(data, profile.displayName));
+    outlet.querySelector('#dash-adjust-balance')?.addEventListener('click', () => openBalanceAdjustModal());
     bindDonut(outlet);
     if (data.trend) bindMonthly(outlet, data.trend);
   } catch (err) {

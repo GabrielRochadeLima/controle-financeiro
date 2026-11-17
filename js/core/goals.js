@@ -111,8 +111,9 @@ export function summarizeInvestments(investments, movements) {
 
   const items = [...byId.values()].map((e) => {
     const netCents = Math.max(0, e.invested - e.redeemed);
-    const hasCur = e.investment.current_amount != null && e.investment.current_amount !== '';
-    const curCents = hasCur ? cents(e.investment.current_amount) : null;
+    const rawCur = e.investment.current_amount;
+    const hasCur = rawCur != null && rawCur !== '' && !(cents(rawCur) === 0 && netCents > 0);
+    const curCents = hasCur ? cents(rawCur) : null;
     if (hasCur) {
       hasCurrent = true;
       currentTotal += curCents;
