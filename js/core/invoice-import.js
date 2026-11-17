@@ -28,7 +28,13 @@ const validDay = (y, m, d) => {
 };
 const NEG = '[−–-]'; // inclui o sinal de menos tipográfico (U+2212)
 
-export const BANKS = Object.freeze({ nubank: 'Nubank', mercadopago: 'Mercado Pago', generic: 'Outro banco' });
+export const BANKS = Object.freeze({
+  nubank: 'Nubank',
+  mercadopago: 'Mercado Pago',
+  csv: 'Arquivo CSV',
+  ofx: 'Arquivo OFX',
+  generic: 'Outro banco',
+});
 
 /** Ano de uma data dd/mm que não traz ano: meses depois do mês de referência são do ano anterior. */
 export function inferYear(month, refISO) {
@@ -253,6 +259,255 @@ export function parseInvoice(lines, { today = toISODate(new Date()), bank } = {}
     lines: parsed,
     warnings,
   };
+}
+
+// ---------- CSV (.csv) e OFX (.ofx) ----------
+
+function parseFlexibleDate(raw, refISO) {
+  const s = String(raw ?? '').trim();
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) {
+    const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+    return validDay(y, mo, d) ? isoOf(y, mo, d) : null;
+  }
+  m = s.match(/^(\d{2})[/-](\d{2})(?:[/-](\d{2,4}))?$/);
+  if (m) {
+    const d = Number(m[1]);
+    const mo = Number(m[2]);
+    const y = m[3] ? (m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3])) : inferYear(mo, refISO);
+    return validDay(y, mo, d) ? isoOf(y, mo, d) : null;
+  }
+  return null;
+}
+
+function parseSignedMoney(raw) {
+  const s = String(raw ?? '').trim();
+  if (!s) return null;
+  const neg = new RegExp(NEG).test(s) || /^\(.*\)$/.test(s);
+  const cleaned = s.replace(new RegExp(NEG, 'g'), '').replace(/[()R$\s]/gi, '');
+  const val = parseMoney(cleaned);
+  if (!Number.isFinite(val) || val === 0) return null;
+  return neg ? -Math.abs(val) : Math.abs(val);
+}
+
+function splitCsvRow(line, delimiter) {
+  const out = [];
+  let cur = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') { cur += '"'; i += 1; }
+      else inQuotes = !inQuotes;
+    } else if (ch === delimiter && !inQuotes) {
+      out.push(cur.trim());
+      cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  out.push(cur.trim());
+  return out;
+}
+
+function parseInstallmentText(text, parcelCol = '') {
+  const col = String(parcelCol ?? '').trim();
+  if (col) {
+    const cm = col.match(/(\d{1,2})\s*(?:\/|de)\s*(\d{1,2})/i);
+    if (cm && Number(cm[2]) > 1) {
+      const stripped = installmentOf(text);
+      return { name: stripped.name, installment: { number: Number(cm[1]), count: Number(cm[2]) } };
+    }
+  }
+  const base = installmentOf(text);
+  if (base.installment) return base;
+  const slashEnd = text.match(/^(.+?)\s+(?:parc(?:ela)?\.?\s*)?(\d{1,2})\/(\d{1,2})$/i);
+  if (slashEnd && Number(slashEnd[3]) > 1 && Number(slashEnd[2]) <= Number(slashEnd[3])) {
+    return {
+      name: slashEnd[1].replace(/\s*-\s*$/, '').trim(),
+      installment: { number: Number(slashEnd[2]), count: Number(slashEnd[3]) },
+    };
+  }
+  return base;
+}
+
+function finalizeStructuredLines(rawLines, kind, { closing_date = null, due_date = null, period_start = null, total = null, warnings = [] } = {}) {
+  // Se a maioria dos lançamentos (exceto pagamentos explícitos) vier com sinal negativo
+  // (padrão de arquivos OFX e alguns CSVs bancários), invertemos o sinal para que compras
+  // sejam positivas e créditos/pagamentos sejam negativos.
+  const nonPay = rawLines.filter((r) => !PAYMENT_RE.test(r.name));
+  const negCount = nonPay.filter((r) => r.signedAmount < 0).length;
+  const posCount = nonPay.filter((r) => r.signedAmount > 0).length;
+  const invertSign = negCount > posCount;
+
+  const seen = new Map();
+  const lines = rawLines.map((r) => {
+    const signed = invertSign ? -r.signedAmount : r.signedAmount;
+    const base = makeLine({
+      printedISO: r.printedISO,
+      name: r.name,
+      installment: r.installment,
+      amount: Math.abs(signed),
+      negative: signed < 0,
+      mask: r.mask ?? null,
+    });
+    const date = period_start && closing_date ? placeInWindow(base.printed_date, period_start, closing_date) : base.printed_date;
+    const key = r.fitid
+      ? `fitid:${r.fitid}`
+      : `${base.printed_date}|${base.merchant}|${base.installment ? `${base.installment.number}/${base.installment.count}` : ''}|${base.amount.toFixed(2)}|${base.card_mask ?? ''}`;
+    const occurrence = (seen.get(key) || 0) + 1;
+    seen.set(key, occurrence);
+    return {
+      ...base,
+      date,
+      external_id: `imp-${kind}-${closing_date ?? due_date ?? 'x'}-${hash32(key)}-${occurrence}`,
+    };
+  });
+
+  if (!lines.length) warnings.push('Nenhuma compra foi reconhecida neste arquivo.');
+  return {
+    bank: kind,
+    due_date,
+    closing_date,
+    period_start,
+    total,
+    lines,
+    warnings,
+  };
+}
+
+/**
+ * Interpreta arquivo CSV de fatura de cartão (Nubank, Inter, Itaú, C6, XP, Bradesco, etc.).
+ */
+export function parseCsvInvoice(text, { today = toISODate(new Date()) } = {}) {
+  const rows = String(text ?? '')
+    .replace(/^\uFEFF/, '')
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  if (!rows.length) {
+    return finalizeStructuredLines([], 'csv');
+  }
+
+  // Detecta o delimitador predominante (; , ou tab)
+  const sample = rows.slice(0, 5).join('\n');
+  const delimiter = [';', ',', '\t'].sort(
+    (a, b) => (sample.split(b).length - 1) - (sample.split(a).length - 1),
+  )[0];
+
+  const matrix = rows.map((r) => splitCsvRow(r, delimiter));
+  const first = matrix[0].map((c) => normalizeDescription(c));
+
+  const findCol = (patterns) => first.findIndex((h) => patterns.some((p) => p.test(h)));
+  let dateCol = findCol([/^(data|date|dt)/]);
+  let descCol = findCol([/(titul|title|descri|lancament|historico|estabelecimento|merchant|nome)/]);
+  let amtCol = findCol([/^(valor|amount|value|total|preco|vlr|r\$)/, /(valor.*r\$|em r\$)/]);
+  const parcelCol = findCol([/^(parcela|installment)/]);
+  const maskCol = findCol([/(cartao|card|final)/]);
+
+  const hasHeader = dateCol >= 0 || descCol >= 0 || amtCol >= 0;
+  const startRow = hasHeader ? 1 : 0;
+
+  const rawLines = [];
+  for (let i = startRow; i < matrix.length; i += 1) {
+    const cols = matrix[i];
+    if (cols.length < 2) continue;
+
+    let dIdx = dateCol;
+    let aIdx = amtCol;
+    let mIdx = descCol;
+
+    if (dIdx < 0) dIdx = cols.findIndex((c) => parseFlexibleDate(c, today) != null);
+    if (dIdx < 0) continue;
+    const printedISO = parseFlexibleDate(cols[dIdx], today);
+    if (!printedISO) continue;
+
+    if (aIdx < 0) {
+      for (let c = cols.length - 1; c >= 0; c -= 1) {
+        if (c === dIdx) continue;
+        if (/^-?\s*(?:R\$\s*)?[\d.]+,\d{2}$|^-?\s*(?:R\$\s*)?\d+\.\d{2}$/i.test(cols[c])) {
+          aIdx = c;
+          break;
+        }
+      }
+    }
+    if (aIdx < 0) continue;
+    const signedAmount = parseSignedMoney(cols[aIdx]);
+    if (signedAmount == null) continue;
+
+    if (mIdx < 0) {
+      // Escolhe a coluna textual mais descritiva que não seja data nem valor
+      mIdx = cols.findIndex((c, idx) => idx !== dIdx && idx !== aIdx && idx !== parcelCol && c.length > 1);
+    }
+    const rawDesc = (mIdx >= 0 ? cols[mIdx] : '').trim();
+    if (!rawDesc) continue;
+
+    const { name, installment } = parseInstallmentText(rawDesc, parcelCol >= 0 ? cols[parcelCol] : '');
+    if (!name) continue;
+
+    let mask = null;
+    if (maskCol >= 0 && cols[maskCol]) {
+      const mm = cols[maskCol].match(/(\d{4})\s*$/);
+      if (mm) mask = mm[1];
+    }
+
+    rawLines.push({ printedISO, name, installment, signedAmount, mask });
+  }
+
+  return finalizeStructuredLines(rawLines, 'csv');
+}
+
+/**
+ * Interpreta arquivo OFX (Open Financial Exchange 1.x SGML ou 2.x XML) de cartão de crédito.
+ */
+export function parseOfxInvoice(text, { today = toISODate(new Date()) } = {}) {
+  const src = String(text ?? '');
+  const tagValue = (block, tag) => {
+    const m = block.match(new RegExp(`<${tag}>\\s*([^<\\r\\n]+)`, 'i'));
+    return m ? m[1].trim() : null;
+  };
+  const ofxDate = (raw) => {
+    if (!raw) return null;
+    const m = raw.match(/^(\d{4})(\d{2})(\d{2})/);
+    if (!m) return null;
+    const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+    return validDay(y, mo, d) ? isoOf(y, mo, d) : null;
+  };
+
+  const dtEnd = ofxDate(tagValue(src, 'DTEND'));
+  const closing_date = dtEnd || null;
+  const period_start = closing_date ? addDays(addMonths(closing_date, -1), 1) : null;
+
+  let mask = null;
+  const acct = tagValue(src, 'ACCTID');
+  if (acct) {
+    const mm = acct.replace(/\D/g, '').match(/(\d{4})$/);
+    if (mm) mask = mm[1];
+  }
+
+  const blocks = src.match(/<STMTTRN>[\s\S]*?(?:<\/STMTTRN>|(?=<STMTTRN>|<\/BANKTRANLIST>|$))/gi) ?? [];
+  const rawLines = [];
+
+  for (const block of blocks) {
+    const printedISO = ofxDate(tagValue(block, 'DTPOSTED')) || today;
+    const trnAmt = tagValue(block, 'TRNAMT');
+    const signedAmount = parseSignedMoney(trnAmt);
+    if (signedAmount == null) continue;
+
+    const memo = tagValue(block, 'MEMO');
+    const nameTag = tagValue(block, 'NAME');
+    const rawDesc = [memo, nameTag].sort((a, b) => (b?.length || 0) - (a?.length || 0))[0] ?? '';
+    if (!rawDesc) continue;
+
+    const { name, installment } = parseInstallmentText(rawDesc);
+    if (!name) continue;
+
+    const fitid = tagValue(block, 'FITID');
+    rawLines.push({ printedISO, name, installment, signedAmount, mask, fitid });
+  }
+
+  return finalizeStructuredLines(rawLines, 'ofx', { closing_date, period_start });
 }
 
 /** Soma (em centavos exatos) do que seria importado: só compras. */

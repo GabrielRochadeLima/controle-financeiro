@@ -5,7 +5,7 @@ import { html, mount, $ } from '../core/dom.js';
 import { formatDate, formatMoney, todayISO } from '../core/format.js';
 import { addDays, addMonths, invoiceFor } from '../core/cards.js';
 import {
-  BANKS, buildCategoryMemory, normalizeDescription, parseInvoice, placeInWindow, suggestCategory,
+  BANKS, buildCategoryMemory, normalizeDescription, parseCsvInvoice, parseInvoice, parseOfxInvoice, placeInWindow, suggestCategory,
 } from '../core/invoice-import.js';
 import { isValidISODate } from '../core/validation.js';
 import { emitDataChanged } from '../core/events.js';
@@ -13,7 +13,7 @@ import { friendlyError } from '../core/supabase.js';
 import { getCategories } from '../services/reference.js';
 import { getCards } from '../services/cards.js';
 import {
-  findImportedIds, findInvoice, importCardLines, loadCategoryHistory, readPdfLines,
+  findImportedIds, findInvoice, importCardLines, loadCategoryHistory, readPdfLines, readTextFile,
 } from '../services/invoice-import.js';
 import { openModal } from './modal.js';
 import { toast } from './toast.js';
@@ -34,7 +34,7 @@ export async function openInvoiceImport({ presetCardId = null } = {}) {
   const expenseCats = [...categories.values()].filter((c) => c.kind === 'expense').sort((a, b) => a.sort_order - b.sort_order);
 
   const { el, close } = openModal({
-    title: 'Importar fatura (PDF)',
+    title: 'Importar fatura (PDF, CSV ou OFX)',
     body: html`<div id="ii"></div>`,
   });
   const box = $('#ii', el);
@@ -57,10 +57,10 @@ export async function openInvoiceImport({ presetCardId = null } = {}) {
           </select>
         </div>
         <div class="field">
-          <label for="ii-file">Arquivo PDF da fatura</label>
-          <input class="input" type="file" id="ii-file" accept="application/pdf,.pdf">
+          <label for="ii-file">Arquivo da fatura (PDF, CSV ou OFX)</label>
+          <input class="input" type="file" id="ii-file" accept="application/pdf,.pdf,text/csv,.csv,application/x-ofx,.ofx">
           <span class="field-hint">O arquivo é lido aqui no seu aparelho e não é enviado a nenhum servidor.
-            Funciona com Nubank e Mercado Pago; outros bancos usam um leitor genérico que você revisa.</span>
+            Aceita PDF (Nubank, Mercado Pago e outros bancos), CSV e OFX.</span>
         </div>
         ${needPassword && html`
           <div class="field">
@@ -77,13 +77,24 @@ export async function openInvoiceImport({ presetCardId = null } = {}) {
       e.preventDefault();
       const file = $('#ii-file', box).files[0];
       const error = $('#ii-error', box);
-      if (!file) { error.textContent = 'Escolha o arquivo PDF da fatura.'; error.hidden = false; return; }
+      if (!file) { error.textContent = 'Escolha o arquivo da fatura (PDF, CSV ou OFX).'; error.hidden = false; return; }
       const button = $('#ii-read', box);
       button.classList.add('is-loading'); button.disabled = true;
       const cardId = select.value;
       try {
-        const lines = await readPdfLines(file, $('#ii-pass', box)?.value ?? '');
-        const parsed = parseInvoice(lines, { today: todayISO() });
+        const name = (file.name || '').toLowerCase();
+        const today = todayISO();
+        let parsed;
+        if (name.endsWith('.csv') || file.type === 'text/csv') {
+          const text = await readTextFile(file);
+          parsed = parseCsvInvoice(text, { today });
+        } else if (name.endsWith('.ofx') || file.type === 'application/x-ofx') {
+          const text = await readTextFile(file);
+          parsed = parseOfxInvoice(text, { today });
+        } else {
+          const lines = await readPdfLines(file, $('#ii-pass', box)?.value ?? '');
+          parsed = parseInvoice(lines, { today });
+        }
         await stepReview(cardId, parsed);
       } catch (err) {
         if (err.code === 'password' || err.code === 'wrong_password') {
@@ -91,7 +102,7 @@ export async function openInvoiceImport({ presetCardId = null } = {}) {
           return;
         }
         const text = err.code === 'too_big' ? 'Arquivo muito grande (máximo 15 MB).'
-          : err.code === 'invalid' ? 'Não consegui abrir este PDF. Confira se é a fatura em PDF.'
+          : err.code === 'invalid' ? 'Não consegui abrir este arquivo. Confira se é uma fatura em PDF, CSV ou OFX.'
             : friendlyError(err, 'Não foi possível ler a fatura.');
         stepFile(text);
       }

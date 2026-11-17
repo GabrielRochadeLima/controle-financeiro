@@ -5,7 +5,7 @@ import { accountBalance, periodSummary, transactionSign } from '../js/core/finan
 import { validateBudget, validateCard, validateContribution, validateGoal, validateInvestment, validateRecurring, validateTransaction } from '../js/core/validation.js';
 import { daysUntil, goalProgress, summarizeInvestments } from '../js/core/goals.js';
 import { itemsToLines } from '../js/core/pdf-lines.js';
-import { buildCategoryMemory, detectBank, hash32, inferYear, parseInvoice, placeInWindow, purchasesTotal, suggestCategory } from '../js/core/invoice-import.js';
+import { buildCategoryMemory, detectBank, hash32, inferYear, parseCsvInvoice, parseInvoice, parseOfxInvoice, placeInWindow, purchasesTotal, suggestCategory } from '../js/core/invoice-import.js';
 import { parseMoney } from '../js/core/format.js';
 import { NO_CATEGORY, activeChips, activeGroups, clearGroup, emptyFilters, isUuid, parseSource, resolvePeriod, validateFilters } from '../js/core/filters.js';
 import { barLayout, chartRange, closedMonthsAverage, compactMoney, donutItems, donutSegments, monthSeries, niceScale, roundedTopPath } from '../js/core/charts.js';
@@ -400,6 +400,84 @@ eq('pdf: junta itens da mesma linha e ordena por x', itemsToLines([
   { str: 'Outra linha', transform: [1, 0, 0, 1, 20, 680] },
   { str: '  ', transform: [1, 0, 0, 1, 50, 680] },
 ]), ['05 AGO Loja R$ 10,00', 'Outra linha']);
+
+// ---- importação de fatura (CSV e OFX) ----
+const csvNu = [
+  'date,category,title,amount',
+  '2026-10-12,transporte,Uber Trip,24.90',
+  '2026-10-15,compras,Loja Central - Parcela 2/5,120.00',
+  '2026-10-20,,Pagamento recebido,-300.00',
+].join('\n');
+const parsedCsvNu = parseCsvInvoice(csvNu, { today: '2026-11-01' });
+eq('csv nubank: compras e pagamento', [
+  parsedCsvNu.bank,
+  parsedCsvNu.lines.filter((l) => l.kind === 'purchase').map((l) => [l.date, l.description, l.amount]),
+  parsedCsvNu.lines.filter((l) => l.kind === 'payment').length,
+], ['csv', [['2026-10-12', 'Uber Trip', 24.9], ['2026-10-15', 'Loja Central (2/5)', 120]], 1]);
+
+const csvBr = [
+  'Data;Lançamento;Parcela;Cartão;Valor (R$)',
+  '18/10/2026;"Supermercado São João";1/3;Final 4321;R$ 350,40',
+  '22/10/2026;Estorno Tarifa;-;Final 4321;-R$ 15,00',
+].join('\r\n');
+const parsedCsvBr = parseCsvInvoice(csvBr, { today: '2026-11-01' });
+eq('csv br (;): parcela em coluna, máscara e estorno', [
+  parsedCsvBr.lines[0].description,
+  parsedCsvBr.lines[0].card_mask,
+  parsedCsvBr.lines[0].amount,
+  parsedCsvBr.lines[1].kind,
+], ['Supermercado São João (1/3)', '4321', 350.4, 'credit']);
+
+const ofxSample = `
+OFXHEADER:100
+<OFX>
+  <CREDITCARDMSGSRSV1>
+    <CCSTMTTRNRS>
+      <CCSTMTRS>
+        <CCACCTFROM><ACCTID>5555444433339876</ACCTID></CCACCTFROM>
+        <BANKTRANLIST>
+          <DTSTART>20261006000000</DTSTART>
+          <DTEND>20261105000000</DTEND>
+          <STMTTRN>
+            <TRNTYPE>DEBIT</TRNTYPE>
+            <DTPOSTED>20261014120000</DTPOSTED>
+            <TRNAMT>-89.90</TRNAMT>
+            <FITID>TXN-001</FITID>
+            <MEMO>Farmacia Popular 2/4</MEMO>
+          </STMTTRN>
+          <STMTTRN>
+            <TRNTYPE>DEBIT</TRNTYPE>
+            <DTPOSTED>20261025120000</DTPOSTED>
+            <TRNAMT>-45.00</TRNAMT>
+            <FITID>TXN-002</FITID>
+            <MEMO>Restaurante Sabor</MEMO>
+          </STMTTRN>
+          <STMTTRN>
+            <TRNTYPE>CREDIT</TRNTYPE>
+            <DTPOSTED>20261010120000</DTPOSTED>
+            <TRNAMT>500.00</TRNAMT>
+            <FITID>TXN-003</FITID>
+            <MEMO>Pagamento Fatura</MEMO>
+          </STMTTRN>
+        </BANKTRANLIST>
+      </CCSTMTRS>
+    </CCSTMTTRNRS>
+  </CREDITCARDMSGSRSV1>
+</OFX>`;
+const parsedOfx = parseOfxInvoice(ofxSample, { today: '2026-11-06' });
+eq('ofx: fechamento, máscara e inversão automática de sinal de débito', [
+  parsedOfx.bank,
+  parsedOfx.closing_date,
+  parsedOfx.period_start,
+  parsedOfx.lines.filter((l) => l.kind === 'purchase').map((l) => [l.date, l.description, l.amount, l.card_mask]),
+  parsedOfx.lines.filter((l) => l.kind === 'payment').length,
+], [
+  'ofx',
+  '2026-11-05',
+  '2026-10-06',
+  [['2026-10-14', 'Farmacia Popular (2/4)', 89.9, '9876'], ['2026-10-25', 'Restaurante Sabor', 45, '9876']],
+  1,
+]);
 
 console.log(fails ? `\n${fails} FALHA(S)` : 'todos os testes passaram');
 process.exitCode = fails ? 1 : 0;

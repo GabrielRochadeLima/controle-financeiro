@@ -48,6 +48,20 @@ export async function readPdfLines(file, password = '') {
   }
 }
 
+/**
+ * Lê um arquivo de texto (.csv ou .ofx) com suporte a UTF-8 e fallback para Windows-1252/Latin-1
+ * (comum em arquivos exportados por bancos brasileiros como Itaú, Bradesco e BB).
+ */
+export async function readTextFile(file) {
+  if (file.size > MAX_PDF_BYTES) throw Object.assign(new Error('Arquivo muito grande'), { code: 'too_big' });
+  const buffer = await file.arrayBuffer();
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(buffer);
+  } catch {
+    return new TextDecoder('windows-1252').decode(buffer);
+  }
+}
+
 /** Quais external_id já existem (importações anteriores). */
 export async function findImportedIds(ids) {
   const found = new Set();
