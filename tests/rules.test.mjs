@@ -311,11 +311,11 @@ eq('resgate exige investimento quando há ativos', validateTransaction({ ...apor
 eq('resgate válido com investimento ativo', validateTransaction({ ...aport, type: 'investment_redemption', investment_id: 'i1' }, aportRef).ok, true);
 eq('investimento_id é ignorado fora de aporte/resgate', validateTransaction({ ...base, account_id: 'a1', investment_id: 'i1' }, aportRef).value.investment_id, null);
 
-eq('saldo da conta considera resgate e contribuição de meta', accountBalance(
+eq('saldo da conta não desconta investimento e considera contribuição de meta', accountBalance(
   { initial_balance: 1000 },
   { income: 500, expense: 200, transfer_in: 0, transfer_out: 0, investment: 300, investment_redemption: 100, invoice_payment: 0, goal_contribution: 50 },
-), 1050);
-eq('sinal de resgate é positivo', transactionSign('investment_redemption'), 1);
+), 1250);
+eq('sinal de investimento é neutro e de resgate é positivo', [transactionSign('investment'), transactionSign('investment_redemption')], [0, 1]);
 eq('periodSummary desconta resgates de invested', periodSummary([
   { type: 'investment', amount: 500 },
   { type: 'investment_redemption', amount: 150 },

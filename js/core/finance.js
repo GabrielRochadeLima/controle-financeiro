@@ -43,8 +43,8 @@ export function accountBalance(account, flows) {
   const f = flows || {};
   return fromCents(
     cents(account.initial_balance) +
-      cents(f.income) + cents(f.transfer_in) + cents(f.investment_redemption) -
-      cents(f.expense) - cents(f.transfer_out) - cents(f.investment) -
+      cents(f.income) + cents(f.transfer_in) -
+      cents(f.expense) - cents(f.transfer_out) -
       cents(f.invoice_payment) - cents(f.goal_contribution),
   );
 }
@@ -112,9 +112,9 @@ export function spendingByCategory(transactions, categories) {
     .sort((a, b) => b.total - a.total);
 }
 
-/** Sinal visual de uma movimentação na lista: +receita/+resgate, −despesa/−aporte, transferência neutra. */
+/** Sinal visual de uma movimentação na lista: +receita/+resgate, −despesa, transferência/aporte neutros. */
 export function transactionSign(type) {
   if (type === TYPES.INCOME || type === TYPES.INVESTMENT_REDEMPTION) return 1;
-  if (type === TYPES.TRANSFER) return 0;
+  if (type === TYPES.TRANSFER || type === TYPES.INVESTMENT) return 0;
   return -1;
 }
